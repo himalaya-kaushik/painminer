@@ -31,11 +31,25 @@ Relevant `config_json` keys:
 from __future__ import annotations
 
 from collections.abc import Iterator
+from datetime import datetime, timezone
 from typing import Any
 
 import httpx
 
 from .base import Adapter, FetchedItem, clean_html, content_hash
+
+
+def _to_epoch(value: Any, is_iso: bool) -> int | None:
+    """Coerce a timestamp field to epoch seconds. Handles ints and ISO-8601."""
+    if value is None:
+        return None
+    if not is_iso:
+        return int(value)
+    text = str(value).replace("Z", "+00:00")
+    dt = datetime.fromisoformat(text)
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return int(dt.timestamp())
 
 
 class JsonApiAdapter(Adapter):
@@ -58,6 +72,11 @@ class JsonApiAdapter(Adapter):
         self.url_template: str | None = cfg.get("url_template")
         self.timeout_seconds: float = float(cfg.get("timeout_seconds", 20))
         self.clean_html: bool = bool(cfg.get("clean_html", False))
+        self.timestamp_is_iso: bool = bool(cfg.get("timestamp_is_iso", False))
+        self.more_path: str | None = cfg.get("more_path")   # e.g. "has_more"
+        self.max_pages: int = int(cfg.get("max_pages", 20))
+        self.date_sorted: bool = bool(cfg.get("date_sorted", False))
+        self.page_start: int = int(cfg.get("page_start", 0))   # 1 for some APIs
 
     # --- HTTP -------------------------------------------------------------
 
@@ -84,8 +103,10 @@ class JsonApiAdapter(Adapter):
             return None
         try:
             source_id = str(hit[self.id_field])
-            created_at_i = int(hit[self.timestamp_field])
+            created_at_i = _to_epoch(hit[self.timestamp_field], self.timestamp_is_iso)
         except (KeyError, TypeError, ValueError):
+            return None
+        if created_at_i is None:
             return None
 
         url: str | None
@@ -124,36 +145,55 @@ class JsonApiAdapter(Adapter):
 
     # --- default pagination ----------------------------------------------
 
+    def _hits(self, data: Any) -> list[dict[str, Any]]:
+        """Extract the hit list — the response itself when hits_path is empty."""
+        if not self.hits_path:
+            return data if isinstance(data, list) else []
+        return data.get(self.hits_path, []) or []
+
     def iter_items(
         self, since_ts: int, until_ts: int | None = None
     ) -> Iterator[list[FetchedItem]]:
-        """Simple offset pagination; filters by timestamp window in-process.
+        """Offset pagination with an in-process [since, until) window.
 
-        Subclasses with special windowing (Hacker News) override this.
+        Handles object- and array-root responses, int or ISO timestamps, and
+        three stop conditions: `more_path` (e.g. has_more), `pages_path` (page
+        count), or single-page. `date_sorted` sources stop once a whole page
+        falls below the window. Subclasses with special windowing (HN, GitHub)
+        override this.
         """
-        page = 0
-        while True:
-            params = {
-                **self.static_params,
-                self.hits_per_page_param: self.hits_per_page,
-                self.page_param: page,
-            }
+        page = self.page_start
+        for fetched_pages in range(1, self.max_pages + 1):
+            params = dict(self.static_params)
+            if self.hits_per_page_param:
+                params[self.hits_per_page_param] = self.hits_per_page
+            if self.page_param:
+                params[self.page_param] = page
             data = self._get(params)
-            hits = data.get(self.hits_path, []) or []
+            hits = self._hits(data)
             if not hits:
                 return
 
+            items = self._page_to_items(hits)
             in_window = [
-                h
-                for h in hits
-                if int(h.get(self.timestamp_field, 0)) >= since_ts
-                and (until_ts is None or int(h.get(self.timestamp_field, 0)) < until_ts)
+                it for it in items
+                if it.created_at_i >= since_ts
+                and (until_ts is None or it.created_at_i < until_ts)
             ]
-            items = self._page_to_items(in_window)
-            if items:
-                yield items
+            if in_window:
+                yield in_window
 
-            nb_pages = int(data.get(self.pages_path, 1) or 1)
-            page += 1
-            if page >= nb_pages:
+            # date-sorted source that has dropped entirely below the window: done
+            if self.date_sorted and items and all(it.created_at_i < since_ts for it in items):
                 return
+
+            # stop conditions
+            if self.more_path is not None:
+                if not (isinstance(data, dict) and data.get(self.more_path)):
+                    return
+            elif self.pages_path and isinstance(data, dict):
+                if fetched_pages >= int(data.get(self.pages_path, 1) or 1):
+                    return
+            else:
+                return   # single-page source (e.g. a bare array endpoint)
+            page += 1
