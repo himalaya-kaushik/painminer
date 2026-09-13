@@ -51,6 +51,49 @@ class LLM:
         self.complete([{"role": "user", "content": "warmup"}])
         return time.time() - started
 
+    def same_underlying_thing(self, statement_a: str, statement_b: str) -> bool:
+        """Clustering tiebreak (§8): do two statements describe the same thing?
+
+        Used only in the ambiguous similarity band. Schema-constrained to a
+        boolean so the answer is always parseable.
+        """
+        schema = {
+            "type": "object",
+            "properties": {"same": {"type": "boolean"}},
+            "required": ["same"],
+            "additionalProperties": False,
+        }
+        for attempt in range(1, MAX_NETWORK_ATTEMPTS + 1):
+            try:
+                resp = self.client.chat.completions.create(
+                    model=self.model,
+                    messages=[
+                        {
+                            "role": "system",
+                            "content": (
+                                "You decide whether two short statements describe the "
+                                "same underlying thing (same specific problem, build, or "
+                                "signal). Answer with a JSON object {\"same\": true|false}."
+                            ),
+                        },
+                        {"role": "user", "content": f"A: {statement_a}\nB: {statement_b}"},
+                    ],
+                    temperature=0,
+                    response_format={
+                        "type": "json_schema",
+                        "json_schema": {"name": "tiebreak", "strict": True, "schema": schema},
+                    },
+                    extra_body={"reasoning_effort": "none"},
+                    max_tokens=50,
+                )
+                import json
+
+                return bool(json.loads(resp.choices[0].message.content or "{}").get("same"))
+            except _RETRYABLE:
+                if attempt < MAX_NETWORK_ATTEMPTS:
+                    time.sleep(min(2 ** (attempt - 1), 5))
+        return False   # on persistent failure, don't merge (safer: new cluster)
+
     def complete(self, messages: list[dict[str, Any]]) -> str:
         """One schema-constrained completion; returns the raw content string.
 

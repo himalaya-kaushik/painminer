@@ -31,6 +31,11 @@ class Config:
     # the submission cleared one of these (configurable).
     build_min_points: int = 50
     build_min_comments: int = 30
+    # Embedding + clustering (§8). Thresholds are starting points to tune.
+    embed_model: str = "BAAI/bge-small-en-v1.5"
+    embed_batch_size: int = 64
+    cluster_merge_threshold: float = 0.90    # >= -> auto-merge
+    cluster_tiebreak_low: float = 0.75       # [low, merge) -> LLM tiebreak; below -> new
 
 
 # Maps a Config field to its .env variable name.
@@ -78,5 +83,9 @@ def load_config() -> Config:
         optional["build_min_points"] = int(os.environ["BUILD_MIN_POINTS"])
     if os.getenv("BUILD_MIN_COMMENTS"):
         optional["build_min_comments"] = int(os.environ["BUILD_MIN_COMMENTS"])
+    if os.getenv("CLUSTER_MERGE_THRESHOLD"):
+        optional["cluster_merge_threshold"] = float(os.environ["CLUSTER_MERGE_THRESHOLD"])
+    if os.getenv("CLUSTER_TIEBREAK_LOW"):
+        optional["cluster_tiebreak_low"] = float(os.environ["CLUSTER_TIEBREAK_LOW"])
 
     return Config(**values, **optional)

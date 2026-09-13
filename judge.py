@@ -184,8 +184,13 @@ def run_judge(
     config: Config,
     *,
     max_items: int | None = None,
+    progress=None,
 ) -> JudgeRunSummary:
-    """Drain the ready queue until empty, max_items, or the time budget."""
+    """Drain the ready queue until empty, max_items, or the time budget.
+
+    `progress`, if given, is called with the running JudgeRunSummary after each
+    claimed batch (for streaming to Telegram).
+    """
     preflight(llm, config)
     llm.warmup()
 
@@ -247,6 +252,8 @@ def run_judge(
                 queue_ops.mark_failed(db, item["id"])
                 summary.items_failed += 1
 
+        if progress is not None:
+            progress(summary)
         if summary.stopped_on_budget:
             break
 

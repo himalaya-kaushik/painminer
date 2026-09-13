@@ -4,6 +4,8 @@ supabase>=2.0
 python-dotenv>=1.0
 httpx>=0.26
 openai>=1.0
+sentence-transformers>=2.2
+python-telegram-bot>=20
 
 # Migration tooling only (migrate.py applies .sql over the pooler).
 # The application itself talks to Postgres through the Supabase client.
