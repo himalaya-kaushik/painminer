@@ -1,0 +1,12 @@
+# Secrets — never commit (brief ground rules)
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.env.local
+
+# OS
+.DS_Store

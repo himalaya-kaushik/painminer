@@ -1,0 +1,9 @@
+# Phase 1 dependencies only. Later phases add from the approved list:
+# python-telegram-bot, openai, sentence-transformers, httpx, pydantic.
+supabase>=2.0
+python-dotenv>=1.0
+httpx>=0.26
+
+# Migration tooling only (migrate.py applies .sql over the pooler).
+# The application itself talks to Postgres through the Supabase client.
+psycopg[binary]>=3.1
