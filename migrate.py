@@ -35,9 +35,9 @@ _POOLER_PREFIXES = ("aws-0", "aws-1")
 
 def parse_db_url(url: str) -> dict[str, str | int]:
     """Split postgresql://user:pass@host:port/dbname without decoding pass."""
-    if "://" not in url:
-        raise ValueError("SUPABASE_DB_URL is not a postgresql:// URL")
-    _, rest = url.split("://", 1)
+    scheme, sep, rest = url.partition("://")
+    if not sep or scheme not in ("postgresql", "postgres"):
+        raise ValueError("SUPABASE_DB_URL must be a postgresql:// URL")
     creds, hostpart = rest.rsplit("@", 1)          # last '@' splits creds from host
     user, password = creds.split(":", 1)           # first ':' splits user from pass
     hostport, dbname = hostpart.split("/", 1)

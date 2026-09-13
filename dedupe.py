@@ -50,6 +50,22 @@ def _link_only(text: str) -> bool:
     return bool(_URL_ONLY.match(text))
 
 
+def classify(text: str, content_hash: str | None, accepted: set[str]) -> tuple[str, str]:
+    """Pure structural-dedupe decision (§4.1).
+
+    Returns (state, reason) where state is 'ready' or 'duplicate'. `accepted`
+    is the set of content_hashes already accepted (this run + prior runs).
+    Kept pure and side-effect-free so it is unit-testable without a database.
+    """
+    if _too_short(text):
+        return "duplicate", "too_short"
+    if _link_only(text):
+        return "duplicate", "link_only"
+    if content_hash and content_hash in accepted:
+        return "duplicate", "content_hash"
+    return "ready", "ok"
+
+
 def _fetched_page(db: DB, limit: int) -> list[dict]:
     resp = (
         db.table("items")
@@ -95,16 +111,13 @@ def dedupe(db: DB, page_size: int = PAGE_SIZE) -> DedupeSummary:
         ready_ids: list[int] = []
         dup_ids: list[int] = []
         for row in batch:
-            text = row["raw_text"] or ""
-            h = row["content_hash"]
-            if _too_short(text) or _link_only(text):
-                dup_ids.append(row["id"])
-            elif h and h in accepted:
-                dup_ids.append(row["id"])
-            else:
+            state, _reason = classify(row["raw_text"] or "", row["content_hash"], accepted)
+            if state == "ready":
                 ready_ids.append(row["id"])
-                if h:
-                    accepted.add(h)   # dedupe within this run too
+                if row["content_hash"]:
+                    accepted.add(row["content_hash"])   # dedupe within this run too
+            else:
+                dup_ids.append(row["id"])
 
         _apply(db, ready_ids, "ready")
         _apply(db, dup_ids, "duplicate")
