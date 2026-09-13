@@ -41,6 +41,7 @@ HACKER_NEWS = {
         "id_field": "objectID",
         "timestamp_field": "created_at_i",
         "thread_id_field": "story_id",   # parent thread, for the per-thread cap
+        "metadata_fields": ["points", "num_comments"],   # engagement (build rule)
         # first non-empty wins: comment body, then Ask/Show text, then title
         "text_fields": ["comment_text", "story_text", "title"],
         "url_template": "https://news.ycombinator.com/item?id={objectID}",

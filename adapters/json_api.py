@@ -53,6 +53,7 @@ class JsonApiAdapter(Adapter):
         self.id_field: str = cfg.get("id_field", "objectID")
         self.timestamp_field: str = cfg.get("timestamp_field", "created_at_i")
         self.thread_id_field: str | None = cfg.get("thread_id_field")
+        self.metadata_fields: list[str] = cfg.get("metadata_fields", [])
         self.text_fields: list[str] = cfg.get("text_fields", [])
         self.url_template: str | None = cfg.get("url_template")
         self.timeout_seconds: float = float(cfg.get("timeout_seconds", 20))
@@ -102,6 +103,10 @@ class JsonApiAdapter(Adapter):
             if raw_thread is not None:
                 thread_id = str(raw_thread)
 
+        metadata = {
+            f: hit[f] for f in self.metadata_fields if hit.get(f) is not None
+        }
+
         return FetchedItem(
             source=self.name,
             source_id=source_id,
@@ -110,6 +115,7 @@ class JsonApiAdapter(Adapter):
             content_hash=content_hash(text),
             created_at_i=created_at_i,
             thread_id=thread_id,
+            metadata=metadata or None,
         )
 
     def _page_to_items(self, hits: list[dict[str, Any]]) -> list[FetchedItem]:

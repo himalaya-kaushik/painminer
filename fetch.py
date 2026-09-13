@@ -93,6 +93,7 @@ def fetch_source(
                     "raw_text": it.raw_text,
                     "content_hash": it.content_hash,
                     "thread_id": it.thread_id,
+                    "metadata": it.metadata or {},
                     "state": "fetched",
                 }
                 for it in page

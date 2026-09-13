@@ -1,12 +1,13 @@
 """The judge prompt — the system (§7). Everything else serves it.
 
 SYSTEM_PROMPT started as the brief's appendix prompt verbatim; the operator
-has since directed specific tightening — confidence anchors, geographic-only
-`arbitrage`, and `research`/`read` restricted to ML / systems / startups with
-no analogical relevance. Keep changes to it deliberate and operator-directed,
-not casual "improvements". The few-shot messages are the brief's negatives
-(unremarkable text -> []) and its one positive (multi-finding extraction).
-FINDINGS_SCHEMA constrains decoding to a valid JSON array at decode time (§7.5).
+has since directed specific tightening — confidence anchors; `build` requires
+a stated problem or strong engagement; `arbitrage` removed; `research`/`read`
+restricted to ML / systems / startups with no analogical relevance. Keep
+changes to it deliberate and operator-directed, not casual "improvements".
+The few-shot messages are the negatives (unremarkable text and bare launches
+-> []) and one positive (multi-finding extraction). FINDINGS_SCHEMA constrains
+decoding to a valid JSON array at decode time (§7.5).
 """
 
 from __future__ import annotations
@@ -31,10 +32,11 @@ Things that may be worth surfacing:
 - pain: a specific problem, manual workaround, or unmet need someone
   describes in their actual work
 - build: something being built — a repo, launch, side project, proof of
-  concept
-- arbitrage: a product or service that exists in one geographic market and
-  is absent in another (e.g. exists in the US, not in India). Strictly
-  geographic — not a general gap, a metaphor, or a price difference.
+  concept. Only surface a build if EITHER the post states the problem the
+  builder was solving, OR the submission shows strong community engagement
+  (an engagement line is provided in brackets when it applies). A bare launch
+  or Show HN that only describes what it is — no stated problem and no strong
+  engagement — is NOT a finding: return nothing for it.
 - research: a paper, result, or research direction in machine learning,
   systems engineering, or startups worth knowing about. Must be directly
   relevant to one of those; reject analogical or adjacent relevance.
@@ -94,6 +96,11 @@ _NEGATIVES = [
     "This. Exactly this. Couldn't agree more, well said.",
     "My advice: just keep grinding, stay curious, and network more. It "
     "worked for me and it'll work for you.",
+    # Bare launches with no stated problem and no engagement line -> [].
+    "Show HN: Pixelpal – a tiny menu bar app that shows a random pixel-art "
+    "cat every hour. Built it over a weekend, would love feedback!",
+    "Show HN: I made a URL shortener. It's fast, open source, and has a clean "
+    "API. Try it out and let me know what you think.",
 ]
 
 # --- few-shot positive: multi-finding extraction (brief) -------------------
@@ -180,25 +187,50 @@ def _fewshot_messages() -> list[dict[str, str]]:
     return msgs
 
 
-def build_messages(source_text: str, retry_error: str | None = None) -> list[dict[str, str]]:
+def _engagement_line(
+    engagement: dict | None, build_min_points: int, build_min_comments: int
+) -> str:
+    """A bracketed context line giving submission engagement, for the build
+    rule. Empty when there is no engagement (e.g. a comment)."""
+    if not engagement:
+        return ""
+    parts = []
+    if engagement.get("points") is not None:
+        parts.append(f"{engagement['points']} points")
+    if engagement.get("num_comments") is not None:
+        parts.append(f"{engagement['num_comments']} comments")
+    if not parts:
+        return ""
+    return (
+        f"[Hacker News submission engagement: {', '.join(parts)}. Treat at "
+        f"least {build_min_points} points or {build_min_comments} comments as "
+        "strong engagement.]\n\n"
+    )
+
+
+def build_messages(
+    source_text: str,
+    retry_error: str | None = None,
+    *,
+    engagement: dict | None = None,
+    build_min_points: int = 50,
+    build_min_comments: int = 30,
+) -> list[dict[str, str]]:
     """Assemble the messages for one judge call.
 
-    On a retry after a parse/validation failure, the error is appended so the
-    model can correct itself (§7.5).
+    `engagement` (HN points/num_comments) is injected as a bracketed context
+    line so the model can apply the build engagement rule. On a retry after a
+    parse/validation failure, the error is appended so the model can correct
+    itself (§7.5).
     """
     messages: list[dict[str, str]] = [{"role": "system", "content": SYSTEM_PROMPT}]
     messages.extend(_fewshot_messages())
+    user = _engagement_line(engagement, build_min_points, build_min_comments) + source_text
     if retry_error:
-        messages.append(
-            {
-                "role": "user",
-                "content": (
-                    f"{source_text}\n\n---\n"
-                    f"Your previous response was rejected: {retry_error}\n"
-                    "Return only a valid JSON array matching the schema."
-                ),
-            }
+        user = (
+            f"{user}\n\n---\n"
+            f"Your previous response was rejected: {retry_error}\n"
+            "Return only a valid JSON array matching the schema."
         )
-    else:
-        messages.append({"role": "user", "content": source_text})
+    messages.append({"role": "user", "content": user})
     return messages

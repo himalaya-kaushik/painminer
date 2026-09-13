@@ -23,9 +23,28 @@ def test_confidence_anchors_present():
     assert "0.5 to 0.7 when it is speculation or opinion" in SYSTEM_PROMPT
 
 
-def test_arbitrage_is_strictly_geographic():
-    assert "exists in one geographic market" in SYSTEM_PROMPT
-    assert "not a general gap, a metaphor, or a price difference" in SYSTEM_PROMPT
+def test_arbitrage_removed_from_taxonomy():
+    assert "arbitrage" not in SYSTEM_PROMPT.lower()
+
+
+def test_build_requires_problem_or_engagement():
+    assert "Only surface a build if EITHER" in SYSTEM_PROMPT
+    assert "return nothing for it" in SYSTEM_PROMPT
+
+
+def test_engagement_line_injected_when_present():
+    msgs = build_messages(
+        "Show HN: Foo", engagement={"points": 120, "num_comments": 45},
+        build_min_points=50, build_min_comments=30,
+    )
+    user = msgs[-1]["content"]
+    assert "120 points" in user and "45 comments" in user
+    assert "at least 50 points or 30 comments" in user
+
+
+def test_no_engagement_line_without_metadata():
+    msgs = build_messages("just a comment")
+    assert "engagement" not in msgs[-1]["content"].lower()
 
 
 def test_read_and_research_reject_analogical():

@@ -47,6 +47,7 @@ class FetchedItem:
     content_hash: str
     created_at_i: int        # source timestamp, epoch seconds (for windowing)
     thread_id: str | None = None   # parent thread (HN story id), for per-thread caps
+    metadata: dict | None = None   # source extras (e.g. HN points/num_comments)
 
 
 def content_hash(text: str) -> str:

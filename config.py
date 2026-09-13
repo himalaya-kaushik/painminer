@@ -27,6 +27,10 @@ class Config:
     max_run_minutes: int = 60          # wall-clock run budget (§5.2)
     llm_timeout_seconds: float = 30.0  # per-call timeout (§7.6)
     llm_api_key: str = "lm-studio"     # LM Studio ignores it; the SDK needs one
+    # `build` engagement rule: a launch with no stated problem still counts if
+    # the submission cleared one of these (configurable).
+    build_min_points: int = 50
+    build_min_comments: int = 30
 
 
 # Maps a Config field to its .env variable name.
@@ -70,5 +74,9 @@ def load_config() -> Config:
         optional["llm_timeout_seconds"] = float(os.environ["LLM_TIMEOUT_SECONDS"])
     if os.getenv("LLM_API_KEY"):
         optional["llm_api_key"] = os.environ["LLM_API_KEY"]
+    if os.getenv("BUILD_MIN_POINTS"):
+        optional["build_min_points"] = int(os.environ["BUILD_MIN_POINTS"])
+    if os.getenv("BUILD_MIN_COMMENTS"):
+        optional["build_min_comments"] = int(os.environ["BUILD_MIN_COMMENTS"])
 
     return Config(**values, **optional)

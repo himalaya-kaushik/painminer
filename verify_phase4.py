@@ -43,7 +43,7 @@ def _prepare_ready_items(db: DB) -> list[dict]:
     dedupe.dedupe(db)
     resp = (
         db.table("items")
-        .select("id, url, raw_text")
+        .select("id, url, raw_text, metadata")
         .eq("source", "hackernews")
         .eq("state", "ready")
         .order("id")
@@ -94,7 +94,12 @@ def main() -> None:
     failed = 0
     total_findings = 0
     for n, item in enumerate(items, 1):
-        result = judge.judge_item(llm, item["raw_text"] or "")
+        result = judge.judge_item(
+            llm, item["raw_text"] or "",
+            engagement=item.get("metadata") or None,
+            build_min_points=config.build_min_points,
+            build_min_comments=config.build_min_comments,
+        )
         _print_case(n, item, result)
         if not result.ok:
             failed += 1
@@ -117,7 +122,12 @@ def main() -> None:
     # Prove the transactional commit path on one item (real write).
     if items:
         victim = items[-1]
-        res = judge.judge_item(llm, victim["raw_text"] or "")
+        res = judge.judge_item(
+            llm, victim["raw_text"] or "",
+            engagement=victim.get("metadata") or None,
+            build_min_points=config.build_min_points,
+            build_min_comments=config.build_min_comments,
+        )
         findings = res.findings or []
         n = judge.commit_judgement(db, victim["id"], findings)
         row = db.get("items", id=victim["id"])

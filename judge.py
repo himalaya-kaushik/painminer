@@ -132,14 +132,27 @@ def parse_and_validate(raw: str) -> tuple[list[dict] | None, str | None]:
 
 # --- judge one item ---------------------------------------------------------
 
-def judge_item(llm: LLM, source_text: str) -> JudgeResult:
+def judge_item(
+    llm: LLM,
+    source_text: str,
+    *,
+    engagement: dict | None = None,
+    build_min_points: int = 50,
+    build_min_comments: int = 30,
+) -> JudgeResult:
     """Judge once, then retry once with the error appended (§7.5)."""
     result = JudgeResult(ok=False, findings=None)
     error: str | None = None
 
     for attempt in range(2):  # first attempt, then one retry
         result.attempts = attempt + 1
-        messages = build_messages(source_text, retry_error=error if attempt else None)
+        messages = build_messages(
+            source_text,
+            retry_error=error if attempt else None,
+            engagement=engagement,
+            build_min_points=build_min_points,
+            build_min_comments=build_min_comments,
+        )
         raw = llm.complete(messages)
         result.raw_outputs.append(raw)
         findings, error = parse_and_validate(raw)
@@ -209,7 +222,13 @@ def run_judge(
                 continue
 
             try:
-                result = judge_item(llm, item["raw_text"] or "")
+                result = judge_item(
+                    llm,
+                    item["raw_text"] or "",
+                    engagement=item.get("metadata") or None,
+                    build_min_points=config.build_min_points,
+                    build_min_comments=config.build_min_comments,
+                )
             except openai.APIError as exc:
                 # Transient LLM/network trouble: release, don't burn a strike.
                 queue_ops.release(db, item["id"])
