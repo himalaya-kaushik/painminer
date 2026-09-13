@@ -106,9 +106,17 @@ python3 -m venv .venv
   window by 6h; the unique `(source, source_id)` makes re-fetches free.
 - **Atomicity.** The claim (`FOR UPDATE SKIP LOCKED`) and the judge commit
   (findings + `raw_text` null + `done`) are each a single SQL transaction.
-- **The prompt is the system.** `prompt.SYSTEM_PROMPT` is verbatim from the
-  brief; empty-array is the correct default answer for most items. Output is
-  schema-constrained at decode time.
+- **The prompt is the system.** `prompt.SYSTEM_PROMPT` began verbatim from the
+  brief, since tightened by the operator (confidence anchors; geographic-only
+  `arbitrage`; `read`/`research` limited to ML / systems / startups). Empty
+  array is the correct default; output is schema-constrained at decode time.
+- **Targeted fetch over firehose.** The HN adapter runs configured `searches`
+  (Ask HN, Show HN, and phrase-targeted pain/build queries) rather than
+  draining general comment volume.
+- **Per-thread cap.** At most 2 findings per parent thread per run (grouped by
+  `items.thread_id`), so one busy discussion can't dominate a digest.
+- **Chunked IN-filters.** dedupe splits `content_hash` / id lookups into
+  chunks so a large batch never overflows the PostgREST request URL.
 - **Open taxonomy.** `kind` is free text end to end; new kinds are accepted at
   write time, reviewed later — not rejected by an enum.
 

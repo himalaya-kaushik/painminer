@@ -1,10 +1,12 @@
 """The judge prompt — the system (§7). Everything else serves it.
 
-SYSTEM_PROMPT is the brief's appendix prompt, VERBATIM. Do not rewrite it or
-"improve" it. The few-shot messages are the brief's negatives (unremarkable
-text -> []) and its one positive (multi-finding extraction). FINDINGS_SCHEMA
-constrains decoding so the model returns a valid JSON array at decode time
-(§7.5).
+SYSTEM_PROMPT started as the brief's appendix prompt verbatim; the operator
+has since directed specific tightening — confidence anchors, geographic-only
+`arbitrage`, and `research`/`read` restricted to ML / systems / startups with
+no analogical relevance. Keep changes to it deliberate and operator-directed,
+not casual "improvements". The few-shot messages are the brief's negatives
+(unremarkable text -> []) and its one positive (multi-finding extraction).
+FINDINGS_SCHEMA constrains decoding to a valid JSON array at decode time (§7.5).
 """
 
 from __future__ import annotations
@@ -30,11 +32,16 @@ Things that may be worth surfacing:
   describes in their actual work
 - build: something being built — a repo, launch, side project, proof of
   concept
-- arbitrage: something working in one market that is absent in another
-  (e.g. exists in the US, not in India)
-- research: a paper, result, or research direction worth knowing about
+- arbitrage: a product or service that exists in one geographic market and
+  is absent in another (e.g. exists in the US, not in India). Strictly
+  geographic — not a general gap, a metaphor, or a price difference.
+- research: a paper, result, or research direction in machine learning,
+  systems engineering, or startups worth knowing about. Must be directly
+  relevant to one of those; reject analogical or adjacent relevance.
 - pattern: an architectural or engineering pattern worth internalising
-- read: an article genuinely worth this person's time
+- read: an article directly relevant to machine learning, systems
+  engineering, or startups that is genuinely worth this person's time.
+  Reject analogical relevance.
 - signal: something shifting — funding, hiring, deprecation, a platform
   changing its terms
 
@@ -55,7 +62,10 @@ Rules for statements:
 - evidence_quote must be copied verbatim from the source text. Never
   invent, paraphrase, or reconstruct a quote.
 - confidence reflects how sure you are this is real and worth surfacing,
-  not how confident the author sounded.
+  not how confident the author sounded. Anchor it:
+  - 0.9 and above only when the finding is specific, verifiable, and
+    directly actionable.
+  - 0.5 to 0.7 when it is speculation or opinion.
 
 Return a JSON array. Each element:
 

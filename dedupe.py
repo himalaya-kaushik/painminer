@@ -30,6 +30,14 @@ MIN_CHARS = 40                      # below this, a comment carries nothing
 ACCEPTED_STATES = ("ready", "processing", "done")
 _URL_ONLY = re.compile(r"^\s*https?://\S+\s*$", re.IGNORECASE)
 PAGE_SIZE = 500
+# content_hashes are 64 chars; too many in one `in.(...)` filter overflows the
+# request URL and PostgREST returns 400. Chunk IN-filter lookups.
+IN_CHUNK = 100
+
+
+def _chunks(seq: list, n: int):
+    for i in range(0, len(seq), n):
+        yield seq[i:i + n]
 
 
 @dataclass
@@ -79,21 +87,22 @@ def _fetched_page(db: DB, limit: int) -> list[dict]:
 
 
 def _existing_accepted_hashes(db: DB, hashes: list[str]) -> set[str]:
-    if not hashes:
-        return set()
-    resp = (
-        db.table("items")
-        .select("content_hash")
-        .in_("state", list(ACCEPTED_STATES))
-        .in_("content_hash", hashes)
-        .execute()
-    )
-    return {r["content_hash"] for r in resp.data if r["content_hash"]}
+    found: set[str] = set()
+    for chunk in _chunks(hashes, IN_CHUNK):
+        resp = (
+            db.table("items")
+            .select("content_hash")
+            .in_("state", list(ACCEPTED_STATES))
+            .in_("content_hash", chunk)
+            .execute()
+        )
+        found.update(r["content_hash"] for r in resp.data if r["content_hash"])
+    return found
 
 
 def _apply(db: DB, ids: list[int], state: str) -> None:
-    if ids:
-        db.table("items").update({"state": state}).in_("id", ids).execute()
+    for chunk in _chunks(ids, IN_CHUNK):
+        db.table("items").update({"state": state}).in_("id", chunk).execute()
 
 
 def dedupe(db: DB, page_size: int = PAGE_SIZE) -> DedupeSummary:

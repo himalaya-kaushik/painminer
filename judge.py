@@ -30,6 +30,25 @@ from prompt import REQUIRED_KEYS, build_messages
 import queue_ops
 
 CLAIM_BATCH = 20
+MAX_FINDINGS_PER_THREAD = 2   # cap findings per parent HN thread per run
+
+
+def thread_key(item: dict) -> str:
+    """Grouping key for the per-thread cap.
+
+    Falls back to the item id when a source has no thread concept, so such
+    items are never lumped together under a shared null key.
+    """
+    return item.get("thread_id") or f"_item:{item['id']}"
+
+
+def cap_for_thread(thread_counts: dict[str, int], key: str, n_findings: int) -> int:
+    """How many of an item's findings may be committed under the per-thread cap.
+
+    Pure and side-effect free (unit-testable). Returns 0..n_findings.
+    """
+    remaining = MAX_FINDINGS_PER_THREAD - thread_counts.get(key, 0)
+    return max(0, min(n_findings, remaining))
 
 
 class PreflightError(RuntimeError):
@@ -51,6 +70,7 @@ class JudgeRunSummary:
     items_failed: int = 0
     findings_created: int = 0
     empty_results: int = 0
+    capped_items: int = 0        # retired without judging: thread already at cap
     stopped_on_budget: bool = False
 
 
@@ -158,6 +178,7 @@ def run_judge(
 
     summary = JudgeRunSummary()
     deadline = time.time() + config.max_run_minutes * 60
+    thread_counts: dict[str, int] = {}   # findings committed per thread, this run
 
     while max_items is None or summary.items_judged + summary.items_failed < max_items:
         if time.time() >= deadline:
@@ -178,6 +199,15 @@ def run_judge(
                 queue_ops.release(db, item["id"])  # give it back, don't burn it
                 summary.stopped_on_budget = True
                 break
+
+            key = thread_key(item)
+            if thread_counts.get(key, 0) >= MAX_FINDINGS_PER_THREAD:
+                # Thread already at its per-run cap: retire the item without
+                # spending an LLM call on it.
+                commit_judgement(db, item["id"], [])
+                summary.capped_items += 1
+                continue
+
             try:
                 result = judge_item(llm, item["raw_text"] or "")
             except openai.APIError as exc:
@@ -187,10 +217,12 @@ def run_judge(
                 raise PreflightError(f"LLM error mid-run: {exc}") from exc
 
             if result.ok and result.findings is not None:
-                n = commit_judgement(db, item["id"], result.findings)
+                allowed = cap_for_thread(thread_counts, key, len(result.findings))
+                n = commit_judgement(db, item["id"], result.findings[:allowed])
+                thread_counts[key] = thread_counts.get(key, 0) + n
                 summary.items_judged += 1
                 summary.findings_created += n
-                if n == 0:
+                if not result.findings:
                     summary.empty_results += 1
             else:
                 queue_ops.mark_failed(db, item["id"])
@@ -210,7 +242,7 @@ def main() -> None:
     print(
         f"judge: {summary.items_judged} judged "
         f"({summary.empty_results} empty), {summary.findings_created} findings, "
-        f"{summary.items_failed} failed"
+        f"{summary.capped_items} thread-capped, {summary.items_failed} failed"
         + (" [stopped on time budget]" if summary.stopped_on_budget else "")
     )
 

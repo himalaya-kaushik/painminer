@@ -46,6 +46,7 @@ class FetchedItem:
     raw_text: str
     content_hash: str
     created_at_i: int        # source timestamp, epoch seconds (for windowing)
+    thread_id: str | None = None   # parent thread (HN story id), for per-thread caps
 
 
 def content_hash(text: str) -> str:

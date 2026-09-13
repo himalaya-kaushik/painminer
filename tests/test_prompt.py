@@ -18,6 +18,23 @@ def test_system_prompt_is_verbatim_anchor_lines():
     assert "evidence_quote must be copied verbatim" in SYSTEM_PROMPT
 
 
+def test_confidence_anchors_present():
+    assert "0.9 and above only when the finding is specific" in SYSTEM_PROMPT
+    assert "0.5 to 0.7 when it is speculation or opinion" in SYSTEM_PROMPT
+
+
+def test_arbitrage_is_strictly_geographic():
+    assert "exists in one geographic market" in SYSTEM_PROMPT
+    assert "not a general gap, a metaphor, or a price difference" in SYSTEM_PROMPT
+
+
+def test_read_and_research_reject_analogical():
+    assert "reject analogical or adjacent relevance" in SYSTEM_PROMPT      # research
+    assert "Reject analogical relevance." in SYSTEM_PROMPT                 # read
+    # both read and research are restricted to the same three domains
+    assert SYSTEM_PROMPT.count("machine learning") >= 2
+
+
 def test_first_message_is_system_then_fewshot():
     msgs = build_messages("some source text")
     assert msgs[0]["role"] == "system"

@@ -1,18 +1,21 @@
 """Hacker News adapter over the Algolia API (§3.2, §5.1).
 
-Uses the same generic JSON-API engine (JsonApiAdapter) for HTTP and item
-mapping, and overrides `iter_items` for two things Algolia forces on us:
+Uses the generic JSON-API engine (JsonApiAdapter) for HTTP and item mapping,
+and overrides `iter_items` for two things Algolia forces on us:
 
-1. Two passes — `tags=comment` and `tags=story` — so we get both discussion
-   text and submissions.
+1. Prioritized, targeted passes. Instead of draining the general comment
+   firehose, it runs a configured list of `searches` — each a `tags` filter
+   plus an optional `query` — so Ask HN, Show HN, and phrase-targeted pain/
+   build searches take priority over raw comment volume. (Falls back to a
+   plain `tags` list when no `searches` are configured.)
 2. Cap-busting windowing. `search_by_date` will not paginate past ~1000
-   results (nbPages tops out), so within a single time window we page until
-   the cap, then move the upper bound down to the oldest timestamp we saw and
-   query again. This walks the whole window newest→oldest in 1000-row steps.
+   results (nbPages tops out), so within a window we page until the cap, then
+   move the upper bound down to the oldest timestamp seen and query again,
+   walking the whole window newest→oldest in ~1000-row steps.
 
-Watermark handling: the caller passes the watermark as `since_ts`; this
-adapter subtracts the configured overlap (default 6h, §5.1) to form the lower
-bound. `until_ts` is the optional upper bound (open to newest when None).
+Watermark handling: the caller passes the watermark as `since_ts`; this adapter
+subtracts the configured overlap (default 6h, §5.1) to form the lower bound.
+`until_ts` is the optional upper bound (open to newest when None).
 
 The watermark itself is advanced only after the judge stage succeeds, never
 here (§5.1) — this adapter never writes it.
@@ -35,27 +38,32 @@ _ALGOLIA_RESULT_CAP = 1000
 class HackerNewsAdapter(JsonApiAdapter):
     def __init__(self, source: dict[str, Any], client: httpx.Client) -> None:
         super().__init__(source, client)
-        self.tags: list[str] = self.config.get("tags", ["comment", "story"])
         self.overlap_seconds: int = int(self.config.get("overlap_hours", 6) * 3600)
+        # A search is {tags?, query?}. Prefer the configured list; otherwise
+        # fall back to the older `tags`-only behaviour for compatibility.
+        searches = self.config.get("searches")
+        if searches is None:
+            searches = [{"tags": t} for t in self.config.get("tags", ["comment", "story"])]
+        self.searches: list[dict[str, str]] = searches
 
     def iter_items(
         self, since_ts: int, until_ts: int | None = None
     ) -> Iterator[list[FetchedItem]]:
         lower = since_ts - self.overlap_seconds
-        for tag in self.tags:
-            yield from self._fetch_tag(tag, lower, until_ts)
+        for search in self.searches:
+            yield from self._fetch_search(search, lower, until_ts)
 
-    def _fetch_tag(
-        self, tag: str, lower: int, until: int | None
+    def _fetch_search(
+        self, search: dict[str, str], lower: int, until: int | None
     ) -> Iterator[list[FetchedItem]]:
-        """Walk one tag's results in [lower, until) newest→oldest."""
+        """Walk one search's results in [lower, until) newest→oldest."""
         upper = until
         while True:
             window_min, fetched, nb_hits = yield from self._page_window(
-                tag, lower, upper
+                search, lower, upper
             )
             if fetched == 0 or nb_hits is None:
-                return                                  # window empty; tag done
+                return                                  # window empty; search done
             if fetched >= nb_hits:
                 return                                  # covered the whole window
             if window_min is None or window_min <= lower:
@@ -69,7 +77,7 @@ class HackerNewsAdapter(JsonApiAdapter):
             upper = next_upper
 
     def _page_window(
-        self, tag: str, lower: int, upper: int | None
+        self, search: dict[str, str], lower: int, upper: int | None
     ) -> Iterator[list[FetchedItem]]:
         """Page a single [lower, upper) window until Algolia stops.
 
@@ -86,12 +94,16 @@ class HackerNewsAdapter(JsonApiAdapter):
         nb_hits: int | None = None
 
         while True:
-            params = {
-                "tags": tag,
+            params: dict[str, Any] = {
                 "numericFilters": numeric_filters,
                 self.hits_per_page_param: self.hits_per_page,
                 self.page_param: page,
             }
+            if search.get("tags"):
+                params["tags"] = search["tags"]
+            if search.get("query"):
+                params["query"] = search["query"]
+
             data = self._get(params)
             hits = data.get(self.hits_path, []) or []
             if not hits:

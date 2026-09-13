@@ -23,12 +23,24 @@ HACKER_NEWS = {
         "adapter_impl": "hackernews",
         "base_url": "https://hn.algolia.com/api/v1",
         "endpoint": "search_by_date",
-        "tags": ["comment", "story"],
+        # Prioritize Ask HN / Show HN and phrase-targeted pain/build searches
+        # over general comment volume. Each entry is {tags?, query?}. Tunable.
+        "searches": [
+            {"tags": "ask_hn"},
+            {"tags": "show_hn"},
+            {"tags": "comment", "query": "I built"},
+            {"tags": "comment", "query": "frustrated with"},
+            {"tags": "comment", "query": "wish there was"},
+            {"tags": "comment", "query": "workaround"},
+            {"tags": "comment", "query": "manually"},
+            {"tags": "comment", "query": "there's no good"},
+        ],
         "hits_per_page": 100,
         "overlap_hours": 6,
         "clean_html": True,        # HN comment_text is HTML; decode to plain text
         "id_field": "objectID",
         "timestamp_field": "created_at_i",
+        "thread_id_field": "story_id",   # parent thread, for the per-thread cap
         # first non-empty wins: comment body, then Ask/Show text, then title
         "text_fields": ["comment_text", "story_text", "title"],
         "url_template": "https://news.ycombinator.com/item?id={objectID}",

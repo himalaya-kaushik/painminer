@@ -1,7 +1,7 @@
 """Structural dedupe decision (dedupe.classify) and helpers."""
 
 from adapters.base import content_hash
-from dedupe import classify, MIN_CHARS
+from dedupe import classify, MIN_CHARS, _chunks, IN_CHUNK
 
 
 LONG = "Solo freelancers manually copy Stripe payouts into spreadsheets weekly."
@@ -43,3 +43,15 @@ def test_whitespace_normalized_hash_matches():
     a = content_hash("Hello   World")
     b = content_hash("hello world")
     assert a == b  # case + whitespace normalized
+
+
+def test_chunks_splits_without_loss():
+    items = list(range(250))
+    chunks = list(_chunks(items, IN_CHUNK))
+    assert all(len(c) <= IN_CHUNK for c in chunks)
+    assert [x for c in chunks for x in c] == items   # order + completeness
+    assert len(chunks) == 3                            # 100 + 100 + 50
+
+
+def test_chunks_empty():
+    assert list(_chunks([], IN_CHUNK)) == []

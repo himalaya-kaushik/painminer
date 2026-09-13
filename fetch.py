@@ -92,6 +92,7 @@ def fetch_source(
                     "url": it.url,
                     "raw_text": it.raw_text,
                     "content_hash": it.content_hash,
+                    "thread_id": it.thread_id,
                     "state": "fetched",
                 }
                 for it in page
