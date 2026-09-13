@@ -35,7 +35,7 @@ from typing import Any
 
 import httpx
 
-from .base import Adapter, FetchedItem, content_hash
+from .base import Adapter, FetchedItem, clean_html, content_hash
 
 
 class JsonApiAdapter(Adapter):
@@ -55,6 +55,7 @@ class JsonApiAdapter(Adapter):
         self.text_fields: list[str] = cfg.get("text_fields", [])
         self.url_template: str | None = cfg.get("url_template")
         self.timeout_seconds: float = float(cfg.get("timeout_seconds", 20))
+        self.clean_html: bool = bool(cfg.get("clean_html", False))
 
     # --- HTTP -------------------------------------------------------------
 
@@ -70,7 +71,9 @@ class JsonApiAdapter(Adapter):
         for field in self.text_fields:
             value = hit.get(field)
             if value and str(value).strip():
-                return str(value).strip()
+                text = clean_html(str(value)) if self.clean_html else str(value).strip()
+                if text:
+                    return text
         return None
 
     def _make_item(self, hit: dict[str, Any]) -> FetchedItem | None:

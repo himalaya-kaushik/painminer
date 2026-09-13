@@ -26,6 +26,7 @@ HACKER_NEWS = {
         "tags": ["comment", "story"],
         "hits_per_page": 100,
         "overlap_hours": 6,
+        "clean_html": True,        # HN comment_text is HTML; decode to plain text
         "id_field": "objectID",
         "timestamp_field": "created_at_i",
         # first non-empty wins: comment body, then Ask/Show text, then title

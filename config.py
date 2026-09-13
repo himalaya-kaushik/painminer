@@ -9,7 +9,7 @@ confusing error.
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass, fields
+from dataclasses import dataclass
 
 from dotenv import load_dotenv
 
@@ -22,6 +22,11 @@ class Config:
     telegram_chat_id: str
     llm_base_url: str
     llm_model: str
+
+    # Optional settings with defaults (not required in .env).
+    max_run_minutes: int = 60          # wall-clock run budget (§5.2)
+    llm_timeout_seconds: float = 30.0  # per-call timeout (§7.6)
+    llm_api_key: str = "lm-studio"     # LM Studio ignores it; the SDK needs one
 
 
 # Maps a Config field to its .env variable name.
@@ -45,17 +50,25 @@ def load_config() -> Config:
 
     values: dict[str, str] = {}
     missing: list[str] = []
-    for field in fields(Config):
-        env_key = _ENV_KEYS[field.name]
+    for field_name, env_key in _ENV_KEYS.items():
         raw = os.getenv(env_key)
         if raw is None or raw.strip() == "":
             missing.append(env_key)
         else:
-            values[field.name] = raw.strip()
+            values[field_name] = raw.strip()
 
     if missing:
         raise RuntimeError(
             "Missing required environment variable(s): " + ", ".join(missing)
         )
 
-    return Config(**values)
+    # Optional overrides.
+    optional: dict[str, object] = {}
+    if os.getenv("MAX_RUN_MINUTES"):
+        optional["max_run_minutes"] = int(os.environ["MAX_RUN_MINUTES"])
+    if os.getenv("LLM_TIMEOUT_SECONDS"):
+        optional["llm_timeout_seconds"] = float(os.environ["LLM_TIMEOUT_SECONDS"])
+    if os.getenv("LLM_API_KEY"):
+        optional["llm_api_key"] = os.environ["LLM_API_KEY"]
+
+    return Config(**values, **optional)
