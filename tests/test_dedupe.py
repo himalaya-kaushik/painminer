@@ -1,7 +1,7 @@
 """Structural dedupe decision (dedupe.classify) and helpers."""
 
-from adapters.base import content_hash
-from dedupe import classify, MIN_CHARS, _chunks, IN_CHUNK
+from painminer.adapters.base import content_hash
+from painminer.pipeline.dedupe import classify, MIN_CHARS, _chunks, IN_CHUNK
 
 
 LONG = "Solo freelancers manually copy Stripe payouts into spreadsheets weekly."

@@ -15,8 +15,8 @@ from typing import Any
 
 from supabase import Client, create_client
 
-from config import Config, load_config
-from net import force_ipv4
+from painminer.config import Config, load_config
+from painminer.net import force_ipv4
 
 # No IPv6 egress on Machine A: force IPv4 before any client opens a connection.
 force_ipv4()

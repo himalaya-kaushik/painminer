@@ -11,7 +11,7 @@ Centroids are anchored on a cluster's first member and never recomputed as a
 running mean (§8). Mentions are deduped by (cluster, source, date) before the
 cluster's sets/count move (record_mention). Embeddings serve clustering only.
 
-    python cluster.py
+    .venv/bin/python -m painminer.pipeline.cluster
 """
 
 from __future__ import annotations
@@ -21,10 +21,10 @@ from datetime import datetime, timezone
 
 import numpy as np
 
-from config import Config, load_config
-from db import DB
-from embed import parse_vector
-from llm import LLM
+from painminer.config import Config, load_config
+from painminer.db import DB
+from painminer.pipeline.embed import parse_vector
+from painminer.llm import LLM
 
 PAGE = 200
 

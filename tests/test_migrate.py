@@ -1,6 +1,6 @@
 """migrate.parse_db_url — must not mangle passwords with raw '/' and '%'."""
 
-from migrate import parse_db_url, _project_ref
+from painminer.tools.migrate import parse_db_url, _project_ref
 
 
 def test_parses_tricky_password_verbatim():

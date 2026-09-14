@@ -1,4 +1,4 @@
-"""Telegram bot (§10) — the whole interface. Run: python telegram_bot.py
+"""Telegram bot (§10) — the whole interface. Run: .venv/bin/python -m painminer.delivery.telegram_bot
 
 Commands: /scan /top /why <id> /status /kinds. Inline buttons 🔥 🗑 👀 write
 feedback / mute / pin. Muted clusters are excluded from /top; every response
@@ -20,14 +20,14 @@ from telegram.ext import (
     ContextTypes,
 )
 
-import actions
-import digest
-import scan
-from config import load_config
-from db import DB
-from embed import Embedder
-from judge import PreflightError
-from llm import LLM
+from painminer.delivery import actions
+from painminer.delivery import digest
+from painminer.pipeline import scan
+from painminer.config import load_config
+from painminer.db import DB
+from painminer.pipeline.embed import Embedder
+from painminer.pipeline.judge import PreflightError
+from painminer.llm import LLM
 
 CONFIG = load_config()
 DB_ = DB.from_config(CONFIG)

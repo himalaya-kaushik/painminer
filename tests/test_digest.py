@@ -4,9 +4,9 @@ and the actions.DISPATCH table shape. No DB/LLM/telegram calls.
 
 from datetime import datetime, timedelta, timezone
 
-import actions
-import digest
-from digest import Card
+from painminer.delivery import actions
+from painminer.delivery import digest
+from painminer.delivery.digest import Card
 
 
 def test_visible_not_muted_not_pinned():

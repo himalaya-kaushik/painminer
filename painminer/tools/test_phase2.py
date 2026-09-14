@@ -8,16 +8,16 @@ Uses a fixed 10-minute window in the past so the result set is stable and the
 run is fast. Temporarily sets overlap_hours=0 for that determinism, then
 restores the production config.
 
-    python test_phase2.py
+    .venv/bin/python -m painminer.tools.test_phase2
 """
 
 from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from db import DB
-from fetch import fetch_source
-import seed_sources
+from painminer.db import DB
+from painminer.pipeline.fetch import fetch_source
+from painminer.tools import seed_sources
 
 # A fixed, historical 10-minute window (well in the past → stable result set).
 T0 = int(datetime(2026, 9, 11, 12, 0, 0, tzinfo=timezone.utc).timestamp())

@@ -13,7 +13,7 @@ Single-shot kinds (`research`, `read`) will never rank under this formula and
 are ranked by recency in the digest instead (§9.1); their score is still
 computed here for completeness.
 
-    python rank.py
+    .venv/bin/python -m painminer.pipeline.rank
 """
 
 from __future__ import annotations
@@ -22,7 +22,7 @@ import math
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
-from db import DB
+from painminer.db import DB
 
 SCORE_VERSION = "v1-recurrence"
 RECENT_DAYS = 7

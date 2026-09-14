@@ -6,9 +6,9 @@ mute and pin also flip cluster state. Reused by the bot's callback handler.
 
 from __future__ import annotations
 
-from db import DB
-from digest import feedback_features
-from rank import SCORE_VERSION
+from painminer.db import DB
+from painminer.delivery.digest import feedback_features
+from painminer.pipeline.rank import SCORE_VERSION
 
 
 def record_feedback(db: DB, cluster_id: int, verdict: str) -> None:

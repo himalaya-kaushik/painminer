@@ -1,7 +1,7 @@
 """Full pipeline orchestrator (§4): fetch -> dedupe -> judge -> embed ->
 cluster -> rank, with a run row for observability and watermark advancement.
 
-Used headless (`python scan.py`) and by the Telegram /scan command. Emits
+Used headless (`.venv/bin/python -m painminer.pipeline.scan`) and by the Telegram /scan command. Emits
 progress strings through the optional `progress` callback so a caller can
 stream them.
 
@@ -19,15 +19,15 @@ from datetime import datetime, timezone
 
 import openai
 
-import cluster as cluster_stage
-import dedupe as dedupe_stage
-import judge as judge_stage
-import rank as rank_stage
-from config import Config, load_config
-from db import DB
-from embed import Embedder, embed_findings
-from fetch import fetch_source
-from llm import LLM
+from painminer.pipeline import cluster as cluster_stage
+from painminer.pipeline import dedupe as dedupe_stage
+from painminer.pipeline import judge as judge_stage
+from painminer.pipeline import rank as rank_stage
+from painminer.config import Config, load_config
+from painminer.db import DB
+from painminer.pipeline.embed import Embedder, embed_findings
+from painminer.pipeline.fetch import fetch_source
+from painminer.llm import LLM
 
 
 @dataclass

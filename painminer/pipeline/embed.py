@@ -5,15 +5,15 @@ loaded once per run, batched. Embeddings are used for clustering, never for
 filtering (§8). Written to findings.embedding (halfvec 384) via the set_embedding
 RPC, which carries the text->halfvec cast.
 
-    python embed.py
+    .venv/bin/python -m painminer.pipeline.embed
 """
 
 from __future__ import annotations
 
 import numpy as np
 
-from config import Config, load_config
-from db import DB
+from painminer.config import Config, load_config
+from painminer.db import DB
 
 
 def format_vector(vec: np.ndarray) -> str:

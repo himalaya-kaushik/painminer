@@ -9,7 +9,7 @@ This stage does NOT advance the watermark. `sources.last_successful_fetch_at`
 moves only after the judge stage succeeds (§5.1); doing it here would mark
 unprocessed data as seen on a mid-run crash.
 
-    python fetch.py <source_name>
+    .venv/bin/python -m painminer.pipeline.fetch <source_name>
 """
 
 from __future__ import annotations
@@ -21,8 +21,8 @@ from datetime import datetime, timezone
 
 import httpx
 
-from adapters import get_adapter
-from db import DB
+from painminer.adapters import get_adapter
+from painminer.db import DB
 
 DEFAULT_BACKFILL_DAYS = 30       # never-run watermark = now - 30d (§5.1)
 
@@ -119,7 +119,7 @@ def fetch_source(
 
 def main() -> None:
     if len(sys.argv) != 2:
-        sys.exit("usage: python fetch.py <source_name>")
+        sys.exit("usage: .venv/bin/python -m painminer.pipeline.fetch <source_name>")
     db = DB.from_config()
 
     def progress(fetched: int, inserted: int) -> None:

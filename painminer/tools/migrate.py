@@ -13,7 +13,7 @@ The DB URL password may contain raw '/' and '%' that a URI parser would
 misread, so the connection parts are split by hand and passed to psycopg as
 keyword arguments rather than as a URI.
 
-    python migrate.py schema.sql
+    .venv/bin/python -m painminer.tools.migrate sql/schema.sql
 """
 
 from __future__ import annotations
@@ -99,7 +99,7 @@ def connect(direct: dict[str, str | int]) -> psycopg.Connection:
 
 def main() -> None:
     if len(sys.argv) != 2:
-        sys.exit("usage: python migrate.py <file.sql>")
+        sys.exit("usage: .venv/bin/python -m painminer.tools.migrate <file.sql>")
     sql_path = sys.argv[1]
 
     load_dotenv()

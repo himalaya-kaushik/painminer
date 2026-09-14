@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import httpx
 
-from config import Config
+from painminer.config import Config
 
 
 def send_telegram(config: Config, text: str) -> bool:

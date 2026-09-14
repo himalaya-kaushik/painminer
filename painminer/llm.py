@@ -13,8 +13,8 @@ from typing import Any
 
 from openai import APIConnectionError, APITimeoutError, OpenAI
 
-from config import Config, load_config
-from prompt import FINDINGS_SCHEMA
+from painminer.config import Config, load_config
+from painminer.prompt import FINDINGS_SCHEMA
 
 MAX_NETWORK_ATTEMPTS = 3          # §7.6: three attempts, then fail
 _RETRYABLE = (APIConnectionError, APITimeoutError)

@@ -2,7 +2,7 @@
 
 import json
 
-from judge import parse_and_validate
+from painminer.pipeline.judge import parse_and_validate
 
 
 def _finding(**over):

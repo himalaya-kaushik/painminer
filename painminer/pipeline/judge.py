@@ -22,12 +22,12 @@ from dataclasses import dataclass, field
 
 import openai
 
-from config import Config, load_config
-from db import DB
-from llm import LLM
-from notify import send_telegram
-from prompt import REQUIRED_KEYS, build_messages
-import queue_ops
+from painminer.config import Config, load_config
+from painminer.db import DB
+from painminer.llm import LLM
+from painminer.notify import send_telegram
+from painminer.prompt import REQUIRED_KEYS, build_messages
+from painminer.pipeline import queue_ops
 
 CLAIM_BATCH = 20
 MAX_FINDINGS_PER_THREAD = 2   # cap findings per parent HN thread per run

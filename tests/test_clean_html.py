@@ -1,6 +1,6 @@
 """clean_html: HN HTML -> plain text (adapters/base.clean_html)."""
 
-from adapters.base import clean_html
+from painminer.adapters.base import clean_html
 
 
 def test_decodes_entities():

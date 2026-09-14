@@ -28,16 +28,16 @@ def get_adapter(source: dict[str, Any], client: httpx.Client) -> Adapter:
     if not _SAFE_NAME.match(impl):
         raise ValueError(f"invalid adapter_impl {impl!r}")
     try:
-        module = importlib.import_module(f"adapters.{impl}")
+        module = importlib.import_module(f"painminer.adapters.{impl}")
     except ModuleNotFoundError as exc:
         raise ValueError(
-            f"no adapter module 'adapters.{impl}' for source {source.get('name')!r}"
+            f"no adapter module 'painminer.adapters.{impl}' for source {source.get('name')!r}"
         ) from exc
 
     for _, obj in inspect.getmembers(module, inspect.isclass):
         if issubclass(obj, Adapter) and obj is not Adapter and obj.__module__ == module.__name__:
             return obj(source, client)
-    raise ValueError(f"adapters.{impl} defines no Adapter subclass")
+    raise ValueError(f"painminer.adapters.{impl} defines no Adapter subclass")
 
 
 __all__ = ["Adapter", "FetchedItem", "content_hash", "get_adapter", "JsonApiAdapter"]

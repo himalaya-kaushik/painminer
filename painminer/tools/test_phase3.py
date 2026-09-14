@@ -5,17 +5,17 @@ ready->processing, a mid-run 'crash' loses nothing (remaining work still
 claims, in-flight rows recover), stuck rows are reclaimed, and a row out of
 attempts is retired to 'failed'.
 
-    python test_phase3.py
+    .venv/bin/python -m painminer.tools.test_phase3
 """
 
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
-from adapters import content_hash
-from db import DB
-import dedupe
-import queue_ops
+from painminer.adapters import content_hash
+from painminer.db import DB
+from painminer.pipeline import dedupe
+from painminer.pipeline import queue_ops
 
 SRC = "phase3_test"
 LONG_A = ("Solo freelancers manually copy Stripe payouts into accounting "

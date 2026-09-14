@@ -1,6 +1,6 @@
 """Per-thread finding cap (judge.cap_for_thread, thread_key)."""
 
-from judge import cap_for_thread, thread_key, MAX_FINDINGS_PER_THREAD
+from painminer.pipeline.judge import cap_for_thread, thread_key, MAX_FINDINGS_PER_THREAD
 
 
 def test_cap_is_two():

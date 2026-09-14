@@ -3,7 +3,7 @@
 Headless equivalent of /scan plus delivery. Prints the operator report:
 findings per source, empty-array rate, and seconds per item.
 
-    python run_pipeline.py
+    .venv/bin/python -m painminer.tools.run_pipeline
 """
 
 from __future__ import annotations
@@ -13,12 +13,12 @@ from collections import Counter
 
 import telegram
 
-import scan
-from config import load_config
-from db import DB
-from embed import Embedder
-from llm import LLM
-from telegram_bot import _send_digest
+from painminer.pipeline import scan
+from painminer.config import load_config
+from painminer.db import DB
+from painminer.pipeline.embed import Embedder
+from painminer.llm import LLM
+from painminer.delivery.telegram_bot import _send_digest
 
 
 def _findings_per_source(db: DB) -> dict[str, int]:

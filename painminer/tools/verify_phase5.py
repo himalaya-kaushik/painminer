@@ -4,16 +4,16 @@ problem must land in one cluster; a clearly different one must not.
 Inserts synthetic findings under a throwaway source, embeds, clusters, asserts,
 and cleans up everything it created.
 
-    python verify_phase5.py
+    .venv/bin/python -m painminer.tools.verify_phase5
 """
 
 from __future__ import annotations
 
-from config import load_config
-from db import DB
-from embed import Embedder, embed_findings
-from cluster import cluster_findings
-from llm import LLM
+from painminer.config import load_config
+from painminer.db import DB
+from painminer.pipeline.embed import Embedder, embed_findings
+from painminer.pipeline.cluster import cluster_findings
+from painminer.llm import LLM
 
 SRC = "phase5_test"
 

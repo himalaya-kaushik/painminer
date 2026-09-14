@@ -4,8 +4,8 @@ Each finding is printed with its source item URL, kind, statement,
 why_it_matters, and evidence_quote. Grouped by kind, and within a kind sorted
 by confidence, so the feed reads top-down.
 
-    python findings_report.py            # writes findings.md
-    python findings_report.py out.md     # writes a different file
+    .venv/bin/python -m painminer.delivery.findings_report            # writes findings.md
+    .venv/bin/python -m painminer.delivery.findings_report out.md     # writes a different file
 """
 
 from __future__ import annotations
@@ -14,7 +14,7 @@ import sys
 from collections import defaultdict
 from datetime import datetime, timezone
 
-from db import DB
+from painminer.db import DB
 
 PAGE = 1000
 
@@ -68,9 +68,9 @@ def build_report(db: DB) -> str:
             "No findings in the database yet. Run a judge pass first:",
             "",
             "```",
-            "python fetch.py hackernews   # or a bounded window",
-            "python dedupe.py",
-            "python judge.py",
+            ".venv/bin/python -m painminer.pipeline.fetch hackernews   # or a bounded window",
+            ".venv/bin/python -m painminer.pipeline.dedupe",
+            ".venv/bin/python -m painminer.pipeline.judge",
             "```",
         ]
         return "\n".join(lines) + "\n"

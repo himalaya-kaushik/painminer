@@ -2,7 +2,7 @@
 
 import json
 
-from prompt import (
+from painminer.prompt import (
     SYSTEM_PROMPT,
     FINDINGS_SCHEMA,
     build_messages,

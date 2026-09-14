@@ -15,7 +15,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from db import DB
+from painminer.db import DB
 
 STUCK_SECONDS = 3600      # reclaim rows stuck in processing longer than this (§4.2)
 MAX_ATTEMPTS = 3          # three strikes -> failed (§4.2)

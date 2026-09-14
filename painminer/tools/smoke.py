@@ -4,12 +4,12 @@ Verifies that .env loads, the Supabase client connects, and schema.sql ran.
 Inserts a disabled source named 'smoke_test', reads it back, prints it, then
 deletes it so the run is idempotent and leaves the registry clean.
 
-    python smoke.py
+    .venv/bin/python -m painminer.tools.smoke
 """
 
 from __future__ import annotations
 
-from db import DB
+from painminer.db import DB
 
 SMOKE_SOURCE = "smoke_test"
 

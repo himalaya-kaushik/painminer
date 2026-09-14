@@ -2,7 +2,7 @@
 
 from datetime import datetime, timedelta, timezone
 
-from rank import recurrence_score, cluster_features
+from painminer.pipeline.rank import recurrence_score, cluster_features
 
 
 NOW = datetime(2026, 1, 15, tzinfo=timezone.utc)

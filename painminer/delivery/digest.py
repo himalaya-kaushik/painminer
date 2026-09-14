@@ -12,8 +12,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
-from db import DB
-from rank import SINGLE_SHOT_KINDS, cluster_features
+from painminer.db import DB
+from painminer.pipeline.rank import SINGLE_SHOT_KINDS, cluster_features
 
 RECURRING_CAP = 5
 SINGLE_SHOT_CAP = 3

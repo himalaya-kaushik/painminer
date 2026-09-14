@@ -1,6 +1,6 @@
 """Pure clustering decision (cluster.decide): merge / tiebreak / new (§8)."""
 
-from cluster import decide
+from painminer.pipeline.cluster import decide
 
 MERGE = 0.90
 TIEBREAK_LOW = 0.75

@@ -24,7 +24,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
-from db import DB
+from painminer.db import DB
 
 MIN_CHARS = 40                      # below this, a comment carries nothing
 ACCEPTED_STATES = ("ready", "processing", "done")

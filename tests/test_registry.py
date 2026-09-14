@@ -1,9 +1,9 @@
 """Dynamic adapter registry (adapters.get_adapter)."""
 
-from adapters import get_adapter
-from adapters.github import GithubAdapter
-from adapters.hackernews import HackerNewsAdapter
-from adapters.json_api import JsonApiAdapter
+from painminer.adapters import get_adapter
+from painminer.adapters.github import GithubAdapter
+from painminer.adapters.hackernews import HackerNewsAdapter
+from painminer.adapters.json_api import JsonApiAdapter
 
 client = object()  # adapters store the client but never call it at construction
 

@@ -2,7 +2,7 @@
 
 import os
 
-import config
+from painminer import config
 
 
 def _with_env(env, fn):

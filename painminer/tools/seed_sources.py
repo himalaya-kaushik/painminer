@@ -4,12 +4,12 @@ Idempotent: upserts registry rows by name. Adding a source later is another
 entry here (or a direct row) — not code, for anything the generic engine or an
 existing adapter covers.
 
-    python seed_sources.py
+    .venv/bin/python -m painminer.tools.seed_sources
 """
 
 from __future__ import annotations
 
-from db import DB
+from painminer.db import DB
 
 # Hacker News via the Algolia API. adapter='json_api' satisfies the schema's
 # adapter CHECK; config_json.adapter_impl selects the HN-specific class, which

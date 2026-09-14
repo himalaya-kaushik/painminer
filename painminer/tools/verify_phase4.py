@@ -6,7 +6,7 @@ finding, the prompt is broken (§7.3, §15). Judging here is DRY — nothing is
 committed and raw_text is preserved — so the prompt can be tuned and this
 re-run. A final step exercises the real transactional commit on one item.
 
-    python verify_phase4.py
+    .venv/bin/python -m painminer.tools.verify_phase4
 """
 
 from __future__ import annotations
@@ -14,13 +14,13 @@ from __future__ import annotations
 import json
 from datetime import datetime, timezone
 
-from db import DB
-from config import load_config
-from llm import LLM
-import judge
-import dedupe
-import seed_sources
-from fetch import fetch_source
+from painminer.db import DB
+from painminer.config import load_config
+from painminer.llm import LLM
+from painminer.pipeline import judge
+from painminer.pipeline import dedupe
+from painminer.tools import seed_sources
+from painminer.pipeline.fetch import fetch_source
 
 SAMPLE = 20
 RECENT_SECONDS = 1800   # pull a recent ~30-minute window to sample

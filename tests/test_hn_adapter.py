@@ -9,7 +9,7 @@ chunks. Fully offline.
 
 import math
 
-from adapters.hackernews import HackerNewsAdapter
+from painminer.adapters.hackernews import HackerNewsAdapter
 
 CAP_RESULTS = 100          # fake pagination ceiling (real Algolia ~1000)
 HPP = 25                   # small page size so the cap bites quickly

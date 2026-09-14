@@ -2,7 +2,7 @@
 
 import numpy as np
 
-from embed import format_vector, parse_vector
+from painminer.pipeline.embed import format_vector, parse_vector
 
 
 def test_format_has_brackets():
