@@ -194,6 +194,25 @@ def _parse(raw: str, index: dict[int, dict]) -> SynthesisResult:
     return result
 
 
+def apply_caps(
+    result: SynthesisResult, *, someone_built_cap: int, total_cap: int
+) -> SynthesisResult:
+    """Enforce the digest size limits deterministically (brief fixes 2 & 3).
+
+    "Someone built" is capped first, then the whole briefing is capped in
+    document order (patterns, then worth_reading, then someone_built) so the
+    highest-value sections survive. Mutates and returns the result.
+    """
+    if result.sections.get("someone_built"):
+        result.sections["someone_built"] = result.sections["someone_built"][:someone_built_cap]
+    remaining = total_cap
+    for section in SYNTHESIS_SECTIONS:
+        items = result.sections.get(section) or []
+        result.sections[section] = items[:max(0, remaining)]
+        remaining -= len(result.sections[section])
+    return result
+
+
 def synthesize_night(
     db: DB,
     llm: LLM,
@@ -208,4 +227,9 @@ def synthesize_night(
         findings_block(findings), shortlist_block(db, config)
     )
     raw = llm.synthesize(messages, SYNTHESIS_SCHEMA)
-    return _parse(raw, index)
+    result = _parse(raw, index)
+    return apply_caps(
+        result,
+        someone_built_cap=config.digest_someone_built_cap,
+        total_cap=config.digest_total_cap,
+    )

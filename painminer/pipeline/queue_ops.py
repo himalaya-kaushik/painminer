@@ -27,14 +27,19 @@ def claim(
     *,
     stuck_seconds: int = STUCK_SECONDS,
     max_attempts: int = MAX_ATTEMPTS,
+    source: str | None = None,
 ) -> list[dict[str, Any]]:
-    """Atomically claim up to batch_size items for processing."""
+    """Atomically claim up to batch_size items for processing.
+
+    `source`, when given, restricts the claim to one source — the primitive the
+    judge uses to round-robin fairly across sources (§6)."""
     resp = db.client.rpc(
         "claim_items",
         {
             "batch_size": batch_size,
             "stuck_seconds": stuck_seconds,
             "max_attempts": max_attempts,
+            "p_source": source,
         },
     ).execute()
     return resp.data or []

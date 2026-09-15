@@ -59,6 +59,10 @@ class Config:
     synthesis_timeout_seconds: float = 300.0     # pass 3 is one long call
     synthesis_shortlist: int = 40      # top-N recurring clusters fed to pass 3
     digests_dir: str = "digests"       # where YYYY-MM-DD.md is written (§4)
+    # Hard caps on the digest, enforced deterministically after synthesis so
+    # they don't depend on the model obeying the prompt.
+    digest_someone_built_cap: int = 3  # max items under "Someone built"
+    digest_total_cap: int = 8          # max items across the whole briefing
 
 
 # Maps a Config field to its .env variable name.
@@ -128,5 +132,9 @@ def load_config() -> Config:
         optional["synthesis_shortlist"] = int(os.environ["SYNTHESIS_SHORTLIST"])
     if os.getenv("DIGESTS_DIR"):
         optional["digests_dir"] = os.environ["DIGESTS_DIR"].strip()
+    if os.getenv("DIGEST_SOMEONE_BUILT_CAP"):
+        optional["digest_someone_built_cap"] = int(os.environ["DIGEST_SOMEONE_BUILT_CAP"])
+    if os.getenv("DIGEST_TOTAL_CAP"):
+        optional["digest_total_cap"] = int(os.environ["DIGEST_TOTAL_CAP"])
 
     return Config(**values, **optional)

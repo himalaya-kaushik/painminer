@@ -60,9 +60,20 @@ GITHUB = {
         "adapter_impl": "github",
         "base_url": "https://api.github.com",
         "endpoint": "search/issues",
+        # Scoped to ML / infra / agent / dev-tools orgs (v3 brief §5). GitHub's
+        # issues-search has no topic: qualifier, so we scope by an org allowlist
+        # (multiple org: are OR'd). All three verified live to return 200 with
+        # on-profile results. Add/remove orgs here — config, not code.
         "queries": [
-            'label:wontfix -"Dependency Dashboard" -label:dependencies',
-            'label:"feature request" state:open comments:>3 -label:dependencies',
+            # ML frameworks, training, inference/serving
+            'org:huggingface org:pytorch org:vllm-project org:ggml-org '
+            'org:ray-project is:issue is:open label:"feature request" comments:>3',
+            # agents, retrieval, LLM-app dev-tools
+            'org:langchain-ai org:run-llama org:pydantic org:BerriAI '
+            'org:sgl-project is:issue is:open label:"feature request" comments:>3',
+            # unmet needs maintainers won't fix (demand signal)
+            'org:huggingface org:vllm-project org:pytorch org:langchain-ai '
+            'org:ggml-org label:wontfix',
         ],
         "hits_per_page": 100,
         "hits_per_page_param": "per_page",
@@ -98,13 +109,14 @@ LOBSTERS = {
     },
 }
 
-# Stack Overflow via the Stack Exchange API — config-only (object with items,
-# has_more paging, epoch timestamps). High-vote/new questions are unmet need.
+# Stack Overflow — DROPPED (v3 brief §5): 1,304 questions in July 2026 vs
+# 207,000 at its 2014 peak, effectively dead. Kept here with enabled=False so
+# re-seeding disables the existing DB row (rather than silently leaving it on).
 STACKOVERFLOW = {
     "name": "stackoverflow",
     "adapter": "json_api",
     "cursor_field": "creation_date",
-    "enabled": True,
+    "enabled": False,
     "config_json": {
         "adapter_impl": "json_api",
         "base_url": "https://api.stackexchange.com/2.3",
@@ -128,7 +140,163 @@ STACKOVERFLOW = {
     },
 }
 
-SOURCES = [HACKER_NEWS, GITHUB, LOBSTERS, STACKOVERFLOW]
+# arXiv via the Atom API (v3 brief §5). The `research` kind finally has a real
+# source. Three cs categories as separate feeds (the AtomAdapter yields one page
+# per feed). MUST be https:// — the shared fetch client does not follow the
+# http->https redirect. adapter='rss' satisfies the schema; adapter_impl='atom'.
+ARXIV = {
+    "name": "arxiv",
+    "adapter": "rss",
+    "cursor_field": "published",
+    "enabled": True,
+    "config_json": {
+        "adapter_impl": "atom",
+        "feed_urls": [
+            "https://export.arxiv.org/api/query?search_query=cat:cs.LG"
+            "&sortBy=submittedDate&sortOrder=descending&max_results=50",
+            "https://export.arxiv.org/api/query?search_query=cat:cs.CL"
+            "&sortBy=submittedDate&sortOrder=descending&max_results=50",
+            "https://export.arxiv.org/api/query?search_query=cat:cs.AI"
+            "&sortBy=submittedDate&sortOrder=descending&max_results=50",
+        ],
+        "id_field": "id",
+        "url_field": "link",
+        "text_fields": ["title", "summary"],
+        "overlap_hours": 6,
+        "clean_html": True,
+        "metadata_fields": ["authors", "categories"],
+        "timeout_seconds": 20,
+    },
+}
+
+# Product Hunt via its public Atom feed (v3 brief §5). /feed is the only
+# anonymous surface; the rest is behind Cloudflare. It is Atom despite the name.
+PRODUCT_HUNT = {
+    "name": "producthunt",
+    "adapter": "rss",
+    "cursor_field": "published",
+    "enabled": True,
+    "config_json": {
+        "adapter_impl": "atom",
+        "feed_url": "https://www.producthunt.com/feed",
+        "id_field": "id",
+        "url_field": "link",
+        "text_fields": ["title", "summary"],
+        "overlap_hours": 6,
+        "clean_html": True,
+        "timeout_seconds": 20,
+    },
+}
+
+# Hugging Face (v3 brief §5), via the public JSON API (bare arrays, no key).
+# daily_papers is curated/trending with full abstracts — the strongest of the
+# three. datasets carry a description when the card has one. Both verified live.
+HF_PAPERS = {
+    "name": "hf_papers",
+    "adapter": "json_api",
+    "cursor_field": "publishedAt",
+    "enabled": True,
+    "config_json": {
+        "adapter_impl": "json_api",
+        "base_url": "https://huggingface.co/api",
+        "endpoint": "daily_papers",
+        "params": {"limit": 50},
+        "hits_path": "",                 # bare array
+        "hits_per_page_param": "",       # single-page poll
+        "page_param": "",
+        "date_sorted": False,            # curated order, not chronological
+        "timestamp_is_iso": True,
+        "id_field": "title",             # no top-level id; title is unique in practice
+        "timestamp_field": "publishedAt",
+        "text_fields": ["summary", "title"],
+        "url_template": "https://huggingface.co/papers/{paper[id]}",  # nested via str.format
+        "timeout_seconds": 20,
+    },
+}
+
+HF_DATASETS = {
+    "name": "hf_datasets",
+    "adapter": "json_api",
+    "cursor_field": "createdAt",
+    "enabled": True,
+    "config_json": {
+        "adapter_impl": "json_api",
+        "base_url": "https://huggingface.co/api",
+        "endpoint": "datasets",
+        "params": {"sort": "createdAt", "direction": "-1", "limit": 50},
+        "hits_path": "",
+        "hits_per_page_param": "",
+        "page_param": "",
+        "date_sorted": True,
+        "timestamp_is_iso": True,
+        "id_field": "id",
+        "timestamp_field": "createdAt",
+        "text_fields": ["description", "id"],
+        "url_template": "https://huggingface.co/datasets/{id}",
+        "metadata_fields": ["likes", "downloads"],
+        "timeout_seconds": 20,
+    },
+}
+
+# HF trending MODELS: the createdAt listing is a firehose of junk fine-tunes
+# with no description field (text is just the repo path), so it's pure triage
+# noise. Wired but DISABLED until it can be driven by a real trending/likes
+# sort. Enable by flipping this and re-seeding.
+HF_MODELS = {
+    "name": "hf_models",
+    "adapter": "json_api",
+    "cursor_field": "createdAt",
+    "enabled": False,
+    "config_json": {
+        "adapter_impl": "json_api",
+        "base_url": "https://huggingface.co/api",
+        "endpoint": "models",
+        "params": {"sort": "createdAt", "direction": "-1", "limit": 50},
+        "hits_path": "",
+        "hits_per_page_param": "",
+        "page_param": "",
+        "date_sorted": True,
+        "timestamp_is_iso": True,
+        "id_field": "id",
+        "timestamp_field": "createdAt",
+        "text_fields": ["id"],
+        "url_template": "https://huggingface.co/{id}",
+        "metadata_fields": ["likes", "downloads"],
+        "timeout_seconds": 20,
+    },
+}
+
+# Y Combinator Launches (v3 brief §5). www.ycombinator.com/launches serves JSON
+# directly to a plain GET — no key, unlike the Algolia-backed company directory
+# (whose public key rotates). High-signal founder content. Verified live.
+YC_LAUNCHES = {
+    "name": "yc_launches",
+    "adapter": "json_api",
+    "cursor_field": "created_at",
+    "enabled": True,
+    "config_json": {
+        "adapter_impl": "json_api",
+        "base_url": "https://www.ycombinator.com",
+        "endpoint": "launches",
+        "hits_path": "hits",
+        "pages_path": "nbPages",
+        "date_sorted": True,
+        "hits_per_page": 50,
+        "hits_per_page_param": "hitsPerPage",
+        "page_param": "page",
+        "id_field": "id",
+        "timestamp_field": "created_at",
+        "timestamp_is_iso": True,
+        "text_fields": ["tagline", "title"],
+        "url_template": "{search_path}",
+        "timeout_seconds": 20,
+    },
+}
+
+SOURCES = [
+    HACKER_NEWS, GITHUB, LOBSTERS, STACKOVERFLOW,
+    ARXIV, PRODUCT_HUNT, HF_PAPERS, HF_DATASETS, HF_MODELS, YC_LAUNCHES,
+]
 
 
 def main() -> None:

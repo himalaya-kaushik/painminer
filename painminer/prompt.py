@@ -355,8 +355,8 @@ Produce three sections, mirroring what he asked for:
 3. Someone built — the few new tools or releases that genuinely matter to him,
    each with the problem it came from. This is a shortlist, not a catalogue:
    if twenty things shipped, name only the handful worth his attention and let
-   the rest fold into a Pattern if they share a theme. Aim for at most a
-   handful here; a wall of tool names is something he scrolls past.
+   the rest fold into a Pattern if they share a theme. At most 3 here; a wall
+   of tool names is something he scrolls past.
 
 Report exactly what the night held — no more, no less. Two failures to avoid,
 and they are equally bad:
@@ -372,6 +372,19 @@ clears his bar; then group and write the ones that do. A genuinely quiet night
 your own words in night_summary and leave the sections empty. But most nights
 are not quiet. Do not default to "quiet"; that verdict must be earned by
 finding nothing, not assumed.
+
+The opening paragraph (night_summary): state plainly what actually happened
+tonight — the few things you saw, as observations. Report; do not editorialize.
+- No superlatives or intensifiers: not "exceptionally", "massive", "dominant",
+  "huge", "remarkable", "a flood of".
+- Do NOT tell him what to conclude or what it means for him.
+  Banned openers/closers: "the signal is clear", "for a founder…",
+  "the takeaway is", "what this means". He draws his own conclusions.
+- A few plain sentences. What happened, not what to think about it.
+
+Selection limits (hard): at most 3 items under "Someone built", and at most 8
+items across the whole briefing. Be selective — pick the ones that matter and
+drop the rest.
 
 Writing rules (these matter as much as what you select):
 - Headlines name the thing. "Dolibarr's API can't book rooms", not "A REST
