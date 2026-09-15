@@ -11,5 +11,10 @@ venv/
 # Generated output — never data in the repo (§12)
 findings.md
 
+# Docs & digests — kept LOCAL, never published to GitHub (operator's request).
+# All human-authored docs live in docs/; daily briefings in digests/.
+*.md
+digests/
+
 # OS
 .DS_Store
