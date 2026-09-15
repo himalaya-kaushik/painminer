@@ -19,12 +19,16 @@ from datetime import datetime, timezone
 
 import openai
 
+from datetime import date as date_cls
+
 from painminer.pipeline import cluster as cluster_stage
 from painminer.pipeline import dedupe as dedupe_stage
 from painminer.pipeline import judge as judge_stage
 from painminer.pipeline import rank as rank_stage
+from painminer.pipeline import synthesize as synth_stage
 from painminer.config import Config, load_config
 from painminer.db import DB
+from painminer.delivery import document as document_stage
 from painminer.pipeline.embed import Embedder, embed_findings
 from painminer.pipeline.fetch import fetch_source
 from painminer.llm import LLM
@@ -40,6 +44,8 @@ class ScanSummary:
     duplicate: int = 0
     judged: int = 0
     empty: int = 0
+    triaged_out: int = 0
+    deep_reads: int = 0
     findings_created: int = 0
     capped: int = 0
     failed: int = 0
@@ -48,10 +54,14 @@ class ScanSummary:
     judge_seconds: float = 0.0
     seconds: float = 0.0
     stopped_on_budget: bool = False
+    # Pass 3 / delivery (§3, §4)
+    synthesis: "synth_stage.SynthesisResult | None" = None
+    digest_path: str | None = None
+    synthesis_error: str | None = None
 
     @property
     def seconds_per_item(self) -> float:
-        return self.judge_seconds / self.judged if self.judged else 0.0
+        return self.judge_seconds / self.deep_reads if self.deep_reads else 0.0
 
 
 def _noop(_msg: str) -> None:
@@ -74,7 +84,8 @@ def run_scan(
     progress("Preflight: checking Machine B…")
     judge_stage.preflight(llm, config)
 
-    run = db.insert("runs", {"started_at": datetime.now(tz=timezone.utc).isoformat()})
+    run_started_iso = datetime.now(tz=timezone.utc).isoformat()
+    run = db.insert("runs", {"started_at": run_started_iso})
     summary.run_id = run["id"]
 
     # --- fetch every enabled source; remember each fetch's start time --------
@@ -109,6 +120,8 @@ def run_scan(
     summary.judge_seconds = time.time() - t0
     summary.judged = js.items_judged
     summary.empty = js.empty_results
+    summary.triaged_out = js.triaged_out
+    summary.deep_reads = js.deep_reads
     summary.findings_created = js.findings_created
     summary.capped = js.capped_items
     summary.failed = js.items_failed
@@ -135,6 +148,21 @@ def run_scan(
     rs = rank_stage.rank_clusters(db)
     progress(f"Ranked {rs.ranked} clusters")
 
+    # --- pass 3: synthesis + the digest document (§3, §4) --------------------
+    progress("Synthesising the night…")
+    try:
+        result = synth_stage.synthesize_night(
+            db, llm, config, run_started_at=run_started_iso
+        )
+        summary.synthesis = result
+        markdown = document_stage.render_markdown(result, day=date_cls.today())
+        path = document_stage.write_digest(markdown, digests_dir=config.digests_dir)
+        summary.digest_path = str(path)
+        progress(f"Wrote digest {path} ({result.n_findings} findings synthesised)")
+    except Exception as exc:   # synthesis must not lose an otherwise-good run
+        summary.synthesis_error = f"{type(exc).__name__}: {exc}"
+        progress(f"Synthesis FAILED: {exc}")
+
     summary.seconds = time.time() - started
     db.table("runs").update({
         "finished_at": datetime.now(tz=timezone.utc).isoformat(),
@@ -154,8 +182,11 @@ def main() -> None:
     s = run_scan(db, llm, config, progress=lambda m: print(m, flush=True))
     print(
         f"\nSCAN DONE run#{s.run_id}: fetched {s.items_fetched}, "
-        f"judged {s.judged} ({s.empty} empty), {s.findings_created} findings, "
-        f"{s.new_clusters} new clusters, {s.seconds_per_item:.1f}s/item"
+        f"{s.triaged_out} triaged out, {s.deep_reads} deep-read, "
+        f"{s.findings_created} findings, {s.new_clusters} new clusters, "
+        f"{s.seconds_per_item:.1f}s/deep-read"
+        + (f", digest {s.digest_path}" if s.digest_path else "")
+        + (f", SYNTHESIS ERROR: {s.synthesis_error}" if s.synthesis_error else "")
     )
 
 

@@ -1,17 +1,25 @@
-"""Judge stage: one LLM call per `ready` item, extract 0..n findings (§7).
+"""Judge stage — passes 1 and 2 of the v3 reader (brief §3).
 
-Contract:
+Per `ready` item, two calls instead of one:
+  1. Triage (cheap, reasoning off): worth a closer look at all? Most items are
+     killed here — committed as `done` with zero findings. This is haystack
+     reduction (§3, pass 1).
+  2. Deep read (survivors only): fetch the item's thread context first, then
+     the v2 extraction (0..n findings) with the reader profile in the prompt
+     (§3, pass 2).
+
+Contract otherwise unchanged:
 - Preflight GET /v1/models before doing anything; on failure, a Telegram
   message naming the VPN and Machine B, then abort (§7.6).
 - One warm-up call to absorb cold start (§7.6).
-- Per item: judge, parse+validate against the schema; on failure retry once
-  with the error appended; on second failure mark the item `failed` (§7.5).
+- Deep read: parse+validate; on failure retry once with the error appended;
+  on second failure mark the item `failed` (§7.5).
 - On success, record findings + null raw_text + mark done in one transaction
   (record_judgement, §6).
 - Respect max_run_minutes; on expiry stop cleanly, leaving the watermark (§5.2).
 
-The watermark itself is advanced by /scan (Phase 7) after a full judge pass,
-not here — a partial run must never mark unprocessed data as seen (§5.1).
+The watermark itself is advanced by /scan after a full judge pass, not here —
+a partial run must never mark unprocessed data as seen (§5.1).
 """
 
 from __future__ import annotations
@@ -28,6 +36,8 @@ from painminer.llm import LLM
 from painminer.notify import send_telegram
 from painminer.prompt import REQUIRED_KEYS, build_messages
 from painminer.pipeline import queue_ops
+from painminer.pipeline import thread_context as thread_context_mod
+from painminer.pipeline.fetch import _make_client
 
 CLAIM_BATCH = 20
 MAX_FINDINGS_PER_THREAD = 2   # cap findings per parent HN thread per run
@@ -66,10 +76,12 @@ class JudgeResult:
 
 @dataclass
 class JudgeRunSummary:
-    items_judged: int = 0
+    items_judged: int = 0        # items processed to `done` (triaged-out + deep-read)
     items_failed: int = 0
     findings_created: int = 0
-    empty_results: int = 0
+    empty_results: int = 0       # items that yielded zero findings (incl. triaged-out)
+    triaged_out: int = 0         # killed by pass-1 triage (worth_reading=false)
+    deep_reads: int = 0          # items that passed triage into pass 2
     capped_items: int = 0        # retired without judging: thread already at cap
     stopped_on_budget: bool = False
 
@@ -136,11 +148,12 @@ def judge_item(
     llm: LLM,
     source_text: str,
     *,
+    context: str | None = None,
     engagement: dict | None = None,
     build_min_points: int = 50,
     build_min_comments: int = 30,
 ) -> JudgeResult:
-    """Judge once, then retry once with the error appended (§7.5)."""
+    """Pass-2 deep read: extract once, then retry once with the error (§7.5)."""
     result = JudgeResult(ok=False, findings=None)
     error: str | None = None
 
@@ -149,6 +162,7 @@ def judge_item(
         messages = build_messages(
             source_text,
             retry_error=error if attempt else None,
+            context=context,
             engagement=engagement,
             build_min_points=build_min_points,
             build_min_comments=build_min_comments,
@@ -185,77 +199,109 @@ def run_judge(
     *,
     max_items: int | None = None,
     progress=None,
+    context_fetcher=thread_context_mod.fetch_thread_context,
+    http_client=None,
 ) -> JudgeRunSummary:
     """Drain the ready queue until empty, max_items, or the time budget.
 
-    `progress`, if given, is called with the running JudgeRunSummary after each
-    claimed batch (for streaming to Telegram).
+    Each item is triaged (pass 1); survivors get thread context fetched and a
+    deep read (pass 2). `progress`, if given, is called with the running
+    JudgeRunSummary after each claimed batch. `context_fetcher`/`http_client`
+    are injectable so tests can run offline (pass None to disable fetching).
     """
     preflight(llm, config)
     llm.warmup()
 
     summary = JudgeRunSummary()
-    deadline = time.time() + config.max_run_minutes * 60
+    # max_run_minutes <= 0 means no cap: drain the whole ready queue.
+    deadline = time.time() + config.max_run_minutes * 60 if config.max_run_minutes > 0 else None
     thread_counts: dict[str, int] = {}   # findings committed per thread, this run
 
-    while max_items is None or summary.items_judged + summary.items_failed < max_items:
-        if time.time() >= deadline:
-            summary.stopped_on_budget = True
-            break
+    owns_client = False
+    client = http_client
+    if client is None and context_fetcher is not None:
+        client = _make_client()
+        owns_client = True
 
-        remaining = CLAIM_BATCH
-        if max_items is not None:
-            remaining = min(
-                CLAIM_BATCH, max_items - (summary.items_judged + summary.items_failed)
-            )
-        batch = queue_ops.claim(db, remaining)
-        if not batch:
-            break
-
-        for item in batch:
-            if time.time() >= deadline:
-                queue_ops.release(db, item["id"])  # give it back, don't burn it
+    try:
+        while max_items is None or summary.items_judged + summary.items_failed < max_items:
+            if deadline is not None and time.time() >= deadline:
                 summary.stopped_on_budget = True
                 break
 
-            key = thread_key(item)
-            if thread_counts.get(key, 0) >= MAX_FINDINGS_PER_THREAD:
-                # Thread already at its per-run cap: retire the item without
-                # spending an LLM call on it.
-                commit_judgement(db, item["id"], [])
-                summary.capped_items += 1
-                continue
-
-            try:
-                result = judge_item(
-                    llm,
-                    item["raw_text"] or "",
-                    engagement=item.get("metadata") or None,
-                    build_min_points=config.build_min_points,
-                    build_min_comments=config.build_min_comments,
+            remaining = CLAIM_BATCH
+            if max_items is not None:
+                remaining = min(
+                    CLAIM_BATCH, max_items - (summary.items_judged + summary.items_failed)
                 )
-            except openai.APIError as exc:
-                # Transient LLM/network trouble: release, don't burn a strike.
-                queue_ops.release(db, item["id"])
-                summary.stopped_on_budget = False
-                raise PreflightError(f"LLM error mid-run: {exc}") from exc
+            batch = queue_ops.claim(db, remaining)
+            if not batch:
+                break
 
-            if result.ok and result.findings is not None:
-                allowed = cap_for_thread(thread_counts, key, len(result.findings))
-                n = commit_judgement(db, item["id"], result.findings[:allowed])
-                thread_counts[key] = thread_counts.get(key, 0) + n
-                summary.items_judged += 1
-                summary.findings_created += n
-                if not result.findings:
-                    summary.empty_results += 1
-            else:
-                queue_ops.mark_failed(db, item["id"])
-                summary.items_failed += 1
+            for item in batch:
+                if deadline is not None and time.time() >= deadline:
+                    queue_ops.release(db, item["id"])  # give it back, don't burn it
+                    summary.stopped_on_budget = True
+                    break
 
-        if progress is not None:
-            progress(summary)
-        if summary.stopped_on_budget:
-            break
+                key = thread_key(item)
+                if thread_counts.get(key, 0) >= MAX_FINDINGS_PER_THREAD:
+                    # Thread already at its per-run cap: retire without a call.
+                    commit_judgement(db, item["id"], [])
+                    summary.capped_items += 1
+                    continue
+
+                text = item["raw_text"] or ""
+                try:
+                    # Pass 1: triage. Cheap filter — most items die here.
+                    verdict = llm.triage(text[: config.triage_max_chars])
+                    if not verdict.get("worth_reading"):
+                        commit_judgement(db, item["id"], [])
+                        summary.items_judged += 1
+                        summary.empty_results += 1
+                        summary.triaged_out += 1
+                        continue
+
+                    # Pass 2: fetch thread context, then deep read.
+                    summary.deep_reads += 1
+                    context = None
+                    if context_fetcher is not None and client is not None:
+                        context = context_fetcher(
+                            item, client, max_chars=config.thread_context_chars
+                        )
+                    result = judge_item(
+                        llm,
+                        text,
+                        context=context,
+                        engagement=item.get("metadata") or None,
+                        build_min_points=config.build_min_points,
+                        build_min_comments=config.build_min_comments,
+                    )
+                except openai.APIError as exc:
+                    # Transient LLM/network trouble: release, don't burn a strike.
+                    queue_ops.release(db, item["id"])
+                    summary.stopped_on_budget = False
+                    raise PreflightError(f"LLM error mid-run: {exc}") from exc
+
+                if result.ok and result.findings is not None:
+                    allowed = cap_for_thread(thread_counts, key, len(result.findings))
+                    n = commit_judgement(db, item["id"], result.findings[:allowed])
+                    thread_counts[key] = thread_counts.get(key, 0) + n
+                    summary.items_judged += 1
+                    summary.findings_created += n
+                    if not result.findings:
+                        summary.empty_results += 1
+                else:
+                    queue_ops.mark_failed(db, item["id"])
+                    summary.items_failed += 1
+
+            if progress is not None:
+                progress(summary)
+            if summary.stopped_on_budget:
+                break
+    finally:
+        if owns_client and client is not None:
+            client.close()
 
     return summary
 
@@ -266,8 +312,9 @@ def main() -> None:
     llm = LLM(config)
     summary = run_judge(db, llm, config)
     print(
-        f"judge: {summary.items_judged} judged "
-        f"({summary.empty_results} empty), {summary.findings_created} findings, "
+        f"judge: {summary.items_judged} processed "
+        f"({summary.triaged_out} triaged out, {summary.deep_reads} deep-read), "
+        f"{summary.findings_created} findings, "
         f"{summary.capped_items} thread-capped, {summary.items_failed} failed"
         + (" [stopped on time budget]" if summary.stopped_on_budget else "")
     )

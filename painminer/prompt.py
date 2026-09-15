@@ -1,26 +1,98 @@
-"""The judge prompt — the system (§7). Everything else serves it.
+"""The prompts for the three passes (v3 brief §2, §3).
 
-SYSTEM_PROMPT started as the brief's appendix prompt verbatim; the operator
-has since directed specific tightening — confidence anchors; `build` requires
-a stated problem or strong engagement; `arbitrage` removed; `research`/`read`
-restricted to ML / systems / startups with no analogical relevance. Keep
-changes to it deliberate and operator-directed, not casual "improvements".
-The few-shot messages are the negatives (unremarkable text and bare launches
--> []) and one positive (multi-finding extraction). FINDINGS_SCHEMA constrains
-decoding to a valid JSON array at decode time (§7.5).
+v3 replaces the single per-item judge with three passes:
+
+  * Pass 1 — triage (per item, cheap): is this worth a closer look at all?
+    TRIAGE_SYSTEM_PROMPT + TRIAGE_SCHEMA, decoded to {worth_reading, one_line}.
+  * Pass 2 — deep read (survivors only): the v2 extraction, now with the
+    reader profile in the system prompt and thread context in the user turn.
+    SYSTEM_PROMPT + FINDINGS_SCHEMA, via build_messages().
+  * Pass 3 — synthesis (one call): a briefing about the whole night, written
+    for the reader. SYNTHESIS_SYSTEM_PROMPT + SYNTHESIS_SCHEMA, via
+    build_synthesis_messages().
+
+READER_PROFILE is the brief §2 text verbatim and goes into the system prompt
+of passes 2 and 3. The deep-read SYSTEM_PROMPT keeps the operator-directed
+tightening from v2 (confidence anchors; `build` requires a stated problem or
+strong engagement; `arbitrage` removed; `research`/`read` restricted). Keep
+changes deliberate, not casual "improvements".
 """
 
 from __future__ import annotations
 
-# --- verbatim system prompt (brief appendix) -------------------------------
-SYSTEM_PROMPT = """\
-You are reading raw text from public developer and startup communities on
-behalf of one person: a machine learning engineer who is building toward
-founding a company within a few years, thinks seriously about system
-architecture, and follows research.
+import json
 
+# --- the reader (brief §2, verbatim; system prompt of passes 2 and 3) -------
+READER_PROFILE = """\
+You are reporting to one person. Everything you surface is judged against
+whether it is useful to him specifically.
+
+He is a machine learning engineer in India, mid-twenties, with an M.Tech
+from IIT Kanpur. He works on LLMs, agents, reinforcement learning, and
+retrieval systems, and has shipped agentic RAG in production. He thinks
+seriously about system architecture and distributed systems.
+
+He intends to start his own company within two to three years and is
+actively looking for what to build. He has no company, no funding, and no
+particular domain allegiance — he is looking for where the gaps are.
+
+What he wants to know about:
+- Research results that change what is possible, especially in LLMs, RL,
+  agents, and training efficiency
+- Where the field is moving: what is getting funded, what domains are
+  suddenly crowded, what techniques are spreading
+- Genuinely new tools and open-source releases in ML and infrastructure
+- Problems people hit repeatedly that nothing currently solves
+
+What he does not want:
+- Configuration options in consumer software
+- Framework and language opinion threads
+- Generic startup advice
+- Anything he would have already known"""
+
+
+# --- Pass 1: triage ---------------------------------------------------------
+TRIAGE_SYSTEM_PROMPT = """\
+You are the first-pass filter for the reader described below. You see one
+piece of text at a time and decide only one thing: does it deserve a closer,
+slower read?
+
+""" + READER_PROFILE + """
+
+MOST TEXT DOES NOT. Your default answer is false. This pass exists to throw
+away the 85-95% of posts that are noise: opinion threads, configuration
+questions in consumer software, generic advice, off-topic chatter, restated
+common knowledge, and anything he would already know. Be ruthless — a later,
+expensive pass reads everything you keep, so a false positive is cheap noise
+but a false negative is the only thing that loses a real signal.
+
+Say true only when the text plausibly contains one of the things he wants:
+a research result that changes what is possible, a real signal about where
+the field or its money is moving, a genuinely new ML/infrastructure tool or
+release, or a problem people hit repeatedly that nothing solves.
+
+Return a JSON object: {"worth_reading": true|false, "one_line": "..."}.
+`one_line` is a terse (<=15 word) description of what the text is, in your
+own words — written for the reader, not a verdict."""
+
+TRIAGE_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "worth_reading": {"type": "boolean"},
+        "one_line": {"type": "string"},
+    },
+    "required": ["worth_reading", "one_line"],
+    "additionalProperties": False,
+}
+
+
+# --- Pass 2: deep read (v2 extraction + reader profile) ---------------------
+_EXTRACTION_GUIDANCE = """\
 Your job is to decide whether this text contains anything genuinely useful
-to that person, and if so, to extract it.
+to that person, and if so, to extract it. You are given the item together
+with its surrounding thread context when there is one — read the whole thing.
+A comment read alone means little; the same comment read inside its thread is
+a different object. Judge the item in that context.
 
 MOST TEXT CONTAINS NOTHING USEFUL. Returning an empty array is the normal,
 correct answer. Do not manufacture a finding because you were asked to look
@@ -80,8 +152,9 @@ Return a JSON array. Each element:
   "confidence": 0.0-1.0
 }
 
-Return [] when there is nothing worth surfacing.\
-"""
+Return [] when there is nothing worth surfacing."""
+
+SYSTEM_PROMPT = READER_PROFILE + "\n\n" + _EXTRACTION_GUIDANCE
 
 # --- few-shot negatives: unremarkable text that must return [] (brief) -----
 # Concrete stand-ins for each category the brief lists as a correct [].
@@ -176,8 +249,6 @@ REQUIRED_KEYS = set(FINDINGS_SCHEMA["items"]["required"])
 
 
 def _fewshot_messages() -> list[dict[str, str]]:
-    import json
-
     msgs: list[dict[str, str]] = []
     for text in _NEGATIVES:
         msgs.append({"role": "user", "content": text})
@@ -208,24 +279,51 @@ def _engagement_line(
     )
 
 
+def _context_block(context: str | None) -> str:
+    """Thread context (parent story + sibling comments), when the fetcher
+    found one, framed so the model reads the item inside its discussion."""
+    if not context or not context.strip():
+        return ""
+    return (
+        "[Thread context — the surrounding discussion this item belongs to. "
+        "Use it to understand the item; extract findings about the item, not "
+        "the whole thread.]\n"
+        f"{context.strip()}\n\n[The item itself:]\n"
+    )
+
+
+def build_triage_messages(source_text: str) -> list[dict[str, str]]:
+    """Messages for one pass-1 triage call (§3, pass 1)."""
+    return [
+        {"role": "system", "content": TRIAGE_SYSTEM_PROMPT},
+        {"role": "user", "content": source_text},
+    ]
+
+
 def build_messages(
     source_text: str,
     retry_error: str | None = None,
     *,
+    context: str | None = None,
     engagement: dict | None = None,
     build_min_points: int = 50,
     build_min_comments: int = 30,
 ) -> list[dict[str, str]]:
-    """Assemble the messages for one judge call.
+    """Assemble the messages for one pass-2 deep-read call.
 
-    `engagement` (HN points/num_comments) is injected as a bracketed context
-    line so the model can apply the build engagement rule. On a retry after a
-    parse/validation failure, the error is appended so the model can correct
-    itself (§7.5).
+    `context` (parent story + sibling comments, fetched before this call) is
+    prepended so the model reads the item inside its thread. `engagement`
+    (HN points/num_comments) is injected as a bracketed context line for the
+    build rule. On a retry after a parse/validation failure, the error is
+    appended so the model can correct itself (§7.5).
     """
     messages: list[dict[str, str]] = [{"role": "system", "content": SYSTEM_PROMPT}]
     messages.extend(_fewshot_messages())
-    user = _engagement_line(engagement, build_min_points, build_min_comments) + source_text
+    user = (
+        _engagement_line(engagement, build_min_points, build_min_comments)
+        + _context_block(context)
+        + source_text
+    )
     if retry_error:
         user = (
             f"{user}\n\n---\n"
@@ -234,3 +332,106 @@ def build_messages(
         )
     messages.append({"role": "user", "content": user})
     return messages
+
+
+# --- Pass 3: synthesis (the product) ---------------------------------------
+SYNTHESIS_SYSTEM_PROMPT = READER_PROFILE + """
+
+You are writing tonight's briefing for him. You are given every finding
+extracted tonight, plus recurring clusters from previous nights (their
+statement, how many times and across how many sources they have been seen,
+and on how many days). You can see across all of it at once — that is the
+entire point. You are not summarising posts one by one. You are reporting on
+the night.
+
+Produce three sections, mirroring what he asked for:
+
+1. Patterns — things visible only across multiple items. "Five YC companies
+   launched in agriculture this batch" is one observation, not five findings.
+   Recurrence across nights counts here too: "third time this week someone
+   hit this." If nothing connects, this section can be empty.
+2. Worth reading — specific results that change something, each with a line
+   on why it is worth his time.
+3. Someone built — the few new tools or releases that genuinely matter to him,
+   each with the problem it came from. This is a shortlist, not a catalogue:
+   if twenty things shipped, name only the handful worth his attention and let
+   the rest fold into a Pattern if they share a theme. Aim for at most a
+   handful here; a wall of tool names is something he scrolls past.
+
+Report exactly what the night held — no more, no less. Two failures to avoid,
+and they are equally bad:
+- Manufacturing. Do not pad a section with plausible-but-forgettable entries.
+  Five items he scrolls past is a failure.
+- Under-reporting. If ten findings genuinely clear his bar tonight, report ten.
+  Do NOT collapse a busy night into a single line — that throws away real
+  signal. Every finding above that matters to him belongs in the briefing,
+  placed in the right section.
+Work through EVERY finding in the input and decide, one by one, whether it
+clears his bar; then group and write the ones that do. A genuinely quiet night
+— where nothing clears the bar — is a valid, honest result: say so plainly in
+your own words in night_summary and leave the sections empty. But most nights
+are not quiet. Do not default to "quiet"; that verdict must be earned by
+finding nothing, not assumed.
+
+Writing rules (these matter as much as what you select):
+- Headlines name the thing. "Dolibarr's API can't book rooms", not "A REST
+  API limitation in a manufacturing tool".
+- Headlines have a verb and are under 12 words. A noun phrase is a database
+  row; a sentence is writing.
+- Never open a headline or a body with a gerund or an abstract noun phrase.
+- Bodies are 2-3 plain sentences. Write like you are texting someone smart.
+- Never write the literal string "why it matters" — say why it matters in a
+  sentence instead.
+- Quote source text only when the quote carries something a summary cannot.
+- Cite the finding ids that support each item in `finding_ids` (the numbers
+  in brackets in the input). Every item must cite at least one.
+
+Return a JSON object with keys night_summary, patterns, worth_reading,
+someone_built. Each section is an array of {headline, body, finding_ids}."""
+
+_SYNTHESIS_ITEM_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "headline": {"type": "string"},
+        "body": {"type": "string"},
+        "finding_ids": {"type": "array", "items": {"type": "integer"}},
+    },
+    "required": ["headline", "body", "finding_ids"],
+    "additionalProperties": False,
+}
+
+SYNTHESIS_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "night_summary": {"type": "string"},
+        "patterns": {"type": "array", "items": _SYNTHESIS_ITEM_SCHEMA},
+        "worth_reading": {"type": "array", "items": _SYNTHESIS_ITEM_SCHEMA},
+        "someone_built": {"type": "array", "items": _SYNTHESIS_ITEM_SCHEMA},
+    },
+    "required": ["night_summary", "patterns", "worth_reading", "someone_built"],
+    "additionalProperties": False,
+}
+
+SYNTHESIS_SECTIONS = ("patterns", "worth_reading", "someone_built")
+
+
+def build_synthesis_messages(
+    findings_block: str, clusters_block: str
+) -> list[dict[str, str]]:
+    """Messages for the single pass-3 synthesis call (§3, pass 3).
+
+    `findings_block` is tonight's findings, one per line, each prefixed with
+    its finding id in brackets. `clusters_block` is the recurring-cluster
+    shortlist from previous nights. Either may note that it is empty.
+    """
+    user = (
+        "TONIGHT'S FINDINGS:\n"
+        f"{findings_block or '(none tonight)'}\n\n"
+        "RECURRING CLUSTERS (previous nights, for cross-night patterns):\n"
+        f"{clusters_block or '(none yet)'}\n\n"
+        "Write tonight's briefing. Report a quiet night if that is the truth."
+    )
+    return [
+        {"role": "system", "content": SYNTHESIS_SYSTEM_PROMPT},
+        {"role": "user", "content": user},
+    ]

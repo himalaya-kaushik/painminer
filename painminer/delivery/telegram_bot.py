@@ -11,6 +11,7 @@ Only the configured chat is served.
 from __future__ import annotations
 
 import asyncio
+from pathlib import Path
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import (
@@ -22,6 +23,7 @@ from telegram.ext import (
 
 from painminer.delivery import actions
 from painminer.delivery import digest
+from painminer.delivery import document
 from painminer.pipeline import scan
 from painminer.config import load_config
 from painminer.db import DB
@@ -58,6 +60,52 @@ def _card_keyboard(card: digest.Card) -> InlineKeyboardMarkup:
         InlineKeyboardButton("👀", callback_data=f"pin:{card.cluster_id}"),
     ])
     return InlineKeyboardMarkup(rows)
+
+
+def _headline_keyboard(h: document.Headline) -> InlineKeyboardMarkup | None:
+    rows = []
+    if h.url:
+        rows.append([InlineKeyboardButton("🔗 source", url=h.url)])
+    if h.cluster_id is not None:
+        rows.append([
+            InlineKeyboardButton("🔥", callback_data=f"fire:{h.cluster_id}"),
+            InlineKeyboardButton("🗑", callback_data=f"mute:{h.cluster_id}"),
+            InlineKeyboardButton("👀", callback_data=f"pin:{h.cluster_id}"),
+        ])
+    return InlineKeyboardMarkup(rows) if rows else None
+
+
+async def _send_scan_digest(bot, chat_id: int, summary: scan.ScanSummary) -> None:
+    """Deliver the night's digest: the .md as a document, then a short
+    companion message per headline carrying the feedback buttons (§4)."""
+    result = summary.synthesis
+    if result is None or not summary.digest_path:
+        await bot.send_message(
+            chat_id,
+            "No digest this run"
+            + (f" — synthesis failed: {summary.synthesis_error}"
+               if summary.synthesis_error else "."),
+        )
+        return
+
+    path = Path(summary.digest_path)
+    caption = (result.night_summary or "Tonight's digest")[:1000]
+    try:
+        with path.open("rb") as fh:
+            await bot.send_document(chat_id, document=fh, filename=path.name,
+                                    caption=caption)
+    except Exception as exc:
+        await bot.send_message(chat_id, f"(couldn't send digest file: {exc})")
+        await bot.send_message(chat_id, caption)
+
+    heads = document.headlines(result)
+    if not heads:
+        return
+    await bot.send_message(chat_id, "React to tonight's items:")
+    for h in heads:
+        kb = _headline_keyboard(h)
+        await bot.send_message(chat_id, f"{h.n}. {h.headline}",
+                               reply_markup=kb, disable_web_page_preview=True)
 
 
 async def _send_digest(bot, chat_id: int) -> None:
@@ -158,12 +206,15 @@ async def scan_cmd(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
         _SCANNING = False
 
     await status_msg.edit_text(
-        f"Scan complete: fetched {summary.items_fetched}, judged {summary.judged} "
-        f"({summary.empty} empty), {summary.findings_created} findings, "
-        f"{summary.new_clusters} new clusters, {summary.seconds_per_item:.1f}s/item"
+        f"Scan complete: fetched {summary.items_fetched}, "
+        f"{summary.triaged_out} triaged out, {summary.deep_reads} deep-read, "
+        f"{summary.findings_created} findings, {summary.new_clusters} new clusters, "
+        f"{summary.seconds_per_item:.1f}s/deep-read"
         + (" [stopped on time budget]" if summary.stopped_on_budget else "")
     )
-    await _send_digest(ctx.bot, update.effective_chat.id)
+    if summary.digest_path:
+        document.commit_digest(Path(summary.digest_path))
+    await _send_scan_digest(ctx.bot, update.effective_chat.id, summary)
 
 
 async def on_button(update: Update, _ctx: ContextTypes.DEFAULT_TYPE) -> None:

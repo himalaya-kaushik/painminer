@@ -24,7 +24,11 @@ class Config:
     llm_model: str
 
     # Optional settings with defaults (not required in .env).
-    max_run_minutes: int = 60          # wall-clock run budget (§5.2)
+    # Wall-clock cap on the judge stage. 0 (the default) = no cap: judge until
+    # the ready queue is drained. The machine is a dedicated local box, so
+    # there is nothing to budget against; set a positive value only to bound a
+    # cloud/cron run.
+    max_run_minutes: int = 0
     llm_timeout_seconds: float = 30.0  # per-call timeout (§7.6)
     llm_api_key: str = "lm-studio"     # LM Studio ignores it; the SDK needs one
     # `build` engagement rule: a launch with no stated problem still counts if
@@ -36,6 +40,25 @@ class Config:
     embed_batch_size: int = 64
     cluster_merge_threshold: float = 0.90    # >= -> auto-merge
     cluster_tiebreak_low: float = 0.75       # [low, merge) -> LLM tiebreak; below -> new
+
+    # Three-pass reader (v3 brief §3). Reasoning is off by default (LM Studio
+    # thinks by default and it burns ~95% of tokens); raise only where judgment
+    # matters. Values are LM Studio's reasoning_effort levels.
+    triage_max_chars: int = 4000       # pass-1 truncation (haystack reduction)
+    deep_read_reasoning: str = "none"  # pass 2; A/B "low" once running
+    thread_context_chars: int = 6000   # cap on fetched thread context (pass 2)
+    # Pass 3: qwen-extract is extraction-tuned — any reasoning_effort > none
+    # spends the whole token budget on thinking and returns EMPTY content
+    # (A/B'd live: "medium" -> unparseable, "none" -> clean JSON). Keep it off.
+    synthesis_reasoning: str = "none"            # pass 3: the product
+    # Pass 3 is cross-item synthesis, not extraction — use a general/reasoning
+    # model when one is served, not the extraction model. Empty = reuse
+    # llm_model. Set to the model id LM Studio reports.
+    synthesis_model: str = "qwen/qwen3.6-35b-a3b"
+    synthesis_max_tokens: int = 6000             # room for a full briefing
+    synthesis_timeout_seconds: float = 300.0     # pass 3 is one long call
+    synthesis_shortlist: int = 40      # top-N recurring clusters fed to pass 3
+    digests_dir: str = "digests"       # where YYYY-MM-DD.md is written (§4)
 
 
 # Maps a Config field to its .env variable name.
@@ -87,5 +110,23 @@ def load_config() -> Config:
         optional["cluster_merge_threshold"] = float(os.environ["CLUSTER_MERGE_THRESHOLD"])
     if os.getenv("CLUSTER_TIEBREAK_LOW"):
         optional["cluster_tiebreak_low"] = float(os.environ["CLUSTER_TIEBREAK_LOW"])
+    if os.getenv("TRIAGE_MAX_CHARS"):
+        optional["triage_max_chars"] = int(os.environ["TRIAGE_MAX_CHARS"])
+    if os.getenv("DEEP_READ_REASONING"):
+        optional["deep_read_reasoning"] = os.environ["DEEP_READ_REASONING"].strip()
+    if os.getenv("THREAD_CONTEXT_CHARS"):
+        optional["thread_context_chars"] = int(os.environ["THREAD_CONTEXT_CHARS"])
+    if os.getenv("SYNTHESIS_REASONING"):
+        optional["synthesis_reasoning"] = os.environ["SYNTHESIS_REASONING"].strip()
+    if os.getenv("SYNTHESIS_MODEL"):
+        optional["synthesis_model"] = os.environ["SYNTHESIS_MODEL"].strip()
+    if os.getenv("SYNTHESIS_MAX_TOKENS"):
+        optional["synthesis_max_tokens"] = int(os.environ["SYNTHESIS_MAX_TOKENS"])
+    if os.getenv("SYNTHESIS_TIMEOUT_SECONDS"):
+        optional["synthesis_timeout_seconds"] = float(os.environ["SYNTHESIS_TIMEOUT_SECONDS"])
+    if os.getenv("SYNTHESIS_SHORTLIST"):
+        optional["synthesis_shortlist"] = int(os.environ["SYNTHESIS_SHORTLIST"])
+    if os.getenv("DIGESTS_DIR"):
+        optional["digests_dir"] = os.environ["DIGESTS_DIR"].strip()
 
     return Config(**values, **optional)
