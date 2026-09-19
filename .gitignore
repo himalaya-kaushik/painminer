@@ -14,6 +14,7 @@ findings.md
 # Docs & digests — kept LOCAL, never published to GitHub (operator's request).
 # All human-authored docs live in docs/; daily briefings in digests/.
 *.md
+!README.md
 digests/
 
 # OS

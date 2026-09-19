@@ -70,7 +70,8 @@ class _Rpc:
             ][: self.params["batch_size"]]
             for it in batch:
                 it["state"] = "processing"
-            return _Resp(batch)
+                it["attempts"] = it.get("attempts", 0) + 1   # matches claim_items SQL
+            return _Resp([dict(it) for it in batch])   # a copy, like a real RPC row
         if self.name == "record_judgement":
             item_id = self.params["p_item_id"]
             self.db.items[item_id]["state"] = "done"
@@ -93,7 +94,7 @@ class FakeDB:
     def __init__(self, n_items: int):
         self.items = {
             i: {"id": i, "source": "only_source", "raw_text": f"item {i} text",
-                "state": "ready", "thread_id": None, "metadata": None}
+                "state": "ready", "thread_id": None, "metadata": None, "attempts": 0}
             for i in range(1, n_items + 1)
         }
         self.committed: list[tuple[int, int]] = []
@@ -106,10 +107,13 @@ class FakeDB:
 # --- minimal fake LLM --------------------------------------------------------
 
 class FlakyLLM:
-    """Always triages worth_reading=True; complete() fails on specific calls."""
+    """Always triages worth_reading=True; complete() fails on specific calls,
+    or unconditionally (every call) when the item's text matches poison_texts
+    — models a request that deterministically fails, not a random blip."""
 
-    def __init__(self, fail_on: set[int]):
+    def __init__(self, fail_on: set[int] = frozenset(), poison_texts: set[str] = frozenset()):
         self.fail_on = fail_on   # 1-indexed call numbers that raise
+        self.poison_texts = poison_texts
         self.calls = 0
 
     def list_models(self):
@@ -121,8 +125,11 @@ class FlakyLLM:
     def triage(self, _text):
         return {"worth_reading": True, "one_line": ""}
 
-    def complete(self, _messages):
+    def complete(self, messages):
         self.calls += 1
+        content = messages[-1]["content"] if messages else ""
+        if any(p in content for p in self.poison_texts):
+            raise openai.APITimeoutError(request=None)
         if self.calls in self.fail_on:
             raise openai.APITimeoutError(request=None)
         return "[]"
@@ -174,3 +181,29 @@ def test_a_success_between_errors_resets_the_counter():
     summary = run_judge(db, llm, _config(), context_fetcher=None)
     assert all(it["state"] == "done" for it in db.items.values())
     assert summary.items_judged == 10
+
+
+def test_poison_item_fails_after_max_attempts_instead_of_looping_forever():
+    # A real incident: one item's LLM call failed EVERY time it was tried (not
+    # a blip), but queue_ops.release() puts it back in 'ready' -- outside the
+    # crash-reclaim safety net that only fires on stuck 'processing' rows -- so
+    # round-robin kept re-claiming and re-failing the same item indefinitely,
+    # burning a full retry-with-backoff each cycle for zero progress while the
+    # rest of a multi-thousand-item queue barely moved.
+    from painminer.pipeline import queue_ops
+
+    db = FakeDB(10)
+    poison_text = db.items[5]["raw_text"]
+    llm = FlakyLLM(poison_texts={poison_text})
+    summary = run_judge(db, llm, _config(), context_fetcher=None)
+
+    # the poison item is retired, not retried forever.
+    assert db.items[5]["state"] == "failed"
+    assert db.items[5]["attempts"] <= queue_ops.MAX_ATTEMPTS
+    # every other item completed normally -- the poison item didn't block or
+    # abort the rest of the run.
+    for i in range(1, 11):
+        if i != 5:
+            assert db.items[i]["state"] == "done"
+    assert summary.items_failed == 1
+    assert summary.items_judged == 9

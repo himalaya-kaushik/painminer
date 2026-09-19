@@ -252,12 +252,28 @@ def run_judge(
     consecutive_llm_errors = 0   # resets on any successful LLM call
 
     def _handle_llm_error(item: dict, exc: Exception) -> None:
-        """A single LLM call failed after its own internal retries. Release
-        the item (not the item's fault, don't burn a strike) and only abort
-        the whole run once several calls IN A ROW have failed — that's the
-        real "Machine B is down" signal, not a normal blip under load."""
+        """A single LLM call failed after its own internal retries.
+
+        Usually not the item's fault (a transient blip), so release it and
+        keep going. BUT: claim_items' "three strikes -> failed" safety net
+        (sql/queue.sql) only fires on rows stuck in `processing`, never on
+        rows this function explicitly releases back to `ready` — so without a
+        check here, one item that deterministically fails every time (not a
+        blip, something genuinely wrong with that specific call) would be
+        released and re-claimed by the round-robin forever, each cycle
+        burning a full retry-with-backoff, silently consuming most of a run's
+        wall-clock time for zero progress. Mirror the same three-strikes
+        convention explicitly: past MAX_ATTEMPTS, mark it failed instead.
+
+        Also aborts the whole run once several calls IN A ROW have failed —
+        that's the real "Machine B is down" signal, not a normal blip.
+        """
         nonlocal consecutive_llm_errors
-        queue_ops.release(db, item["id"])
+        if item.get("attempts", 0) >= queue_ops.MAX_ATTEMPTS:
+            queue_ops.mark_failed(db, item["id"])
+            summary.items_failed += 1
+        else:
+            queue_ops.release(db, item["id"])
         consecutive_llm_errors += 1
         if consecutive_llm_errors >= MAX_CONSECUTIVE_LLM_ERRORS:
             raise PreflightError(
