@@ -42,6 +42,12 @@ from painminer.pipeline.fetch import _make_client
 CLAIM_BATCH = 20
 PER_SOURCE_CLAIM = 5          # per-source claim size for the round-robin (§6)
 MAX_FINDINGS_PER_THREAD = 2   # cap findings per parent HN thread per run
+# A single LLM timeout/connection error is a blip (Machine B can briefly evict
+# a model under memory pressure with several loaded at once) and must not kill
+# a multi-hour run. Only abort once several IN A ROW fail, which is the real
+# signal Machine B is genuinely down. Each failed item is released, not burned
+# as an attempt, so nothing is lost either way.
+MAX_CONSECUTIVE_LLM_ERRORS = 3
 
 
 def thread_key(item: dict) -> str:
@@ -243,9 +249,37 @@ def run_judge(
             summary.items_judged + summary.items_failed
         ) >= max_items
 
+    consecutive_llm_errors = 0   # resets on any successful LLM call
+
+    def _handle_llm_error(item: dict, exc: Exception) -> None:
+        """A single LLM call failed after its own internal retries. Release
+        the item (not the item's fault, don't burn a strike) and only abort
+        the whole run once several calls IN A ROW have failed — that's the
+        real "Machine B is down" signal, not a normal blip under load."""
+        nonlocal consecutive_llm_errors
+        queue_ops.release(db, item["id"])
+        consecutive_llm_errors += 1
+        if consecutive_llm_errors >= MAX_CONSECUTIVE_LLM_ERRORS:
+            raise PreflightError(
+                f"{consecutive_llm_errors} consecutive LLM errors mid-run "
+                f"(last: {exc}); aborting — this looks like a genuine outage, "
+                "not a blip."
+            ) from exc
+
     def _process(item: dict) -> None:
         """Triage (pass 1) then, for survivors, deep read (pass 2). Updates
-        summary/thread_counts in place. Raises PreflightError on an LLM error."""
+        summary/thread_counts in place. May raise PreflightError — only on a
+        sustained run of LLM errors (see _handle_llm_error).
+
+        Both calls share ONE try/except and the error streak resets only once
+        an item's LLM work fully completes: resetting right after a triage
+        success would let a healthy triage endpoint mask a broken deep-read
+        endpoint forever (every new item's triage success would zero the
+        streak before deep read ever got 3 in a row), which would silently
+        spin — releasing and re-claiming items — rather than ever detecting
+        the outage.
+        """
+        nonlocal consecutive_llm_errors
         key = thread_key(item)
         if thread_counts.get(key, 0) >= MAX_FINDINGS_PER_THREAD:
             commit_judgement(db, item["id"], [])   # thread at cap: retire, no call
@@ -260,6 +294,7 @@ def run_judge(
                 summary.items_judged += 1
                 summary.empty_results += 1
                 summary.triaged_out += 1
+                consecutive_llm_errors = 0
                 return
 
             summary.deep_reads += 1
@@ -275,9 +310,9 @@ def run_judge(
                 build_min_comments=config.build_min_comments,
             )
         except openai.APIError as exc:
-            # Transient LLM/network trouble: release, don't burn a strike.
-            queue_ops.release(db, item["id"])
-            raise PreflightError(f"LLM error mid-run: {exc}") from exc
+            _handle_llm_error(item, exc)
+            return
+        consecutive_llm_errors = 0   # both calls succeeded
 
         if result.ok and result.findings is not None:
             allowed = cap_for_thread(thread_counts, key, len(result.findings))
