@@ -1,9 +1,14 @@
 """Embedding stage (§8): embed finding statements for clustering only.
 
-`bge-small-en-v1.5` via sentence-transformers, MPS with CPU fallback, model
-loaded once per run, batched. Embeddings are used for clustering, never for
-filtering (§8). Written to findings.embedding (halfvec 384) via the set_embedding
-RPC, which carries the text->halfvec cast.
+Embeds via Machine B's OpenAI-compatible `/v1/embeddings` endpoint —
+`bge-small`, 384-dim — the same client and retry contract as every other LLM
+call (LLM.embed(), §7.6). Machine A never loads an embedding model locally:
+no torch, no sentence-transformers. `config.embed_model` names the model id
+LM Studio reports, not a Hugging Face repo path.
+
+Embeddings are used for clustering, never for filtering (§8). Written to
+findings.embedding (halfvec 384) via the set_embedding RPC, which carries the
+text->halfvec cast.
 
     .venv/bin/python -m painminer.pipeline.embed
 """
@@ -14,10 +19,11 @@ import numpy as np
 
 from painminer.config import Config, load_config
 from painminer.db import DB
+from painminer.llm import LLM
 
 
-def format_vector(vec: np.ndarray) -> str:
-    """pgvector text form, e.g. '[0.1,0.2,...]'."""
+def format_vector(vec) -> str:
+    """pgvector text form, e.g. '[0.1,0.2,...]'. Accepts any iterable of floats."""
     return "[" + ",".join(f"{x:.6f}" for x in vec) + "]"
 
 
@@ -27,30 +33,18 @@ def parse_vector(text: str) -> np.ndarray:
 
 
 class Embedder:
-    """Loads the embedding model once; encodes normalized vectors for cosine."""
+    """Encodes finding statements to vectors via Machine B's /v1/embeddings."""
 
-    def __init__(self, model_name: str, batch_size: int = 64) -> None:
-        from sentence_transformers import SentenceTransformer
-        import torch
-
-        device = "mps" if torch.backends.mps.is_available() else "cpu"
-        try:
-            self.model = SentenceTransformer(model_name, device=device)
-        except Exception:                       # MPS init can fail on some setups
-            self.model = SentenceTransformer(model_name, device="cpu")
+    def __init__(self, llm: LLM, batch_size: int = 64) -> None:
+        self.llm = llm
         self.batch_size = batch_size
 
-    def encode(self, texts: list[str]) -> np.ndarray:
-        return self.model.encode(
-            texts,
-            batch_size=self.batch_size,
-            normalize_embeddings=True,          # unit vectors: cosine == dot
-            convert_to_numpy=True,
-        )
+    def encode(self, texts: list[str]) -> list[list[float]]:
+        return self.llm.embed(texts)
 
     @classmethod
     def from_config(cls, config: Config) -> "Embedder":
-        return cls(config.embed_model, config.embed_batch_size)
+        return cls(LLM(config), config.embed_batch_size)
 
 
 def embed_findings(db: DB, embedder: Embedder, batch_size: int = 64) -> int:

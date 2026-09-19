@@ -88,7 +88,7 @@ def main() -> None:
     if summary.synthesis is not None:
         r = summary.synthesis
         counts = " · ".join(f"{s}={len(r.sections.get(s, []))}"
-                            for s in ("patterns", "worth_reading", "someone_built"))
+                            for s in ("patterns", "worth_reading", "shipped", "someone_built"))
         print(f"Synthesis: {counts}  |  \"{r.night_summary[:120]}\"")
     if summary.synthesis_error:
         print(f"Synthesis ERROR: {summary.synthesis_error}")

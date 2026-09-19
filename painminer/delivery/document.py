@@ -22,9 +22,10 @@ from painminer.pipeline.synthesize import SynthesisResult
 _SECTION_TITLES = {
     "patterns": "Patterns",
     "worth_reading": "Worth reading",
+    "shipped": "Shipped",
     "someone_built": "Someone built",
 }
-_SECTION_ORDER = ("patterns", "worth_reading", "someone_built")
+_SECTION_ORDER = ("patterns", "worth_reading", "shipped", "someone_built")
 
 
 @dataclass

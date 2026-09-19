@@ -21,8 +21,13 @@ def test_someone_built_cap_at_most_3_present():
     assert "at most 3" in SYNTHESIS_SYSTEM_PROMPT
 
 
-def test_total_cap_at_most_8_present():
-    assert "at most 8" in SYNTHESIS_SYSTEM_PROMPT
+def test_total_cap_at_most_10_present():
+    assert "at most 10" in SYNTHESIS_SYSTEM_PROMPT
+
+
+def test_shipped_section_distinct_from_someone_built():
+    assert "Shipped" in SYNTHESIS_SYSTEM_PROMPT
+    assert "NOT for indie/personal projects" in SYNTHESIS_SYSTEM_PROMPT
 
 
 def test_do_not_tell_reader_what_to_conclude_present():

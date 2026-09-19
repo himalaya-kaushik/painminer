@@ -48,6 +48,7 @@ def test_render_markdown_sequential_numbering_across_sections():
         sections={
             "patterns": [_item("P1", "b1", []), _item("P2", "b2", [])],
             "worth_reading": [_item("W1", "b3", [])],
+            "shipped": [_item("SH1", "b5", [])],
             "someone_built": [_item("S1", "b4", [])],
         },
     )
@@ -55,8 +56,30 @@ def test_render_markdown_sequential_numbering_across_sections():
     assert "### 1. P1" in md
     assert "### 2. P2" in md
     assert "### 3. W1" in md
-    assert "### 4. S1" in md
-    assert "b1" in md and "b2" in md and "b3" in md and "b4" in md
+    assert "### 4. SH1" in md   # shipped sits between worth_reading and someone_built
+    assert "### 5. S1" in md
+    assert "b1" in md and "b2" in md and "b3" in md and "b4" in md and "b5" in md
+
+
+def test_render_markdown_shipped_section_header_and_missing_key_safe():
+    # A result with no "shipped" key at all (e.g. built before this section
+    # existed) must render fine with no "## Shipped" header.
+    result = _result(
+        sections={"patterns": [], "worth_reading": [], "someone_built": []},
+    )
+    md = render_markdown(result, day=datetime.date(2026, 9, 15))
+    assert "## Shipped" not in md
+
+    result2 = _result(
+        sections={
+            "patterns": [], "worth_reading": [],
+            "shipped": [_item("A funded lab shipped a new model", "body", [])],
+            "someone_built": [],
+        },
+    )
+    md2 = render_markdown(result2, day=datetime.date(2026, 9, 15))
+    assert "## Shipped" in md2
+    assert "### 1. A funded lab shipped a new model" in md2
 
 
 def test_render_markdown_links_dedupe_and_resolve():

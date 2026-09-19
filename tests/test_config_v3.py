@@ -43,7 +43,7 @@ def test_defaults_via_direct_construction():
         llm_model="m",
     )
     assert cfg.digest_someone_built_cap == 3
-    assert cfg.digest_total_cap == 8
+    assert cfg.digest_total_cap == 10
     assert cfg.synthesis_model == "qwen/qwen3.6-35b-a3b"
     assert cfg.synthesis_reasoning == "none"
     assert cfg.max_run_minutes == 0

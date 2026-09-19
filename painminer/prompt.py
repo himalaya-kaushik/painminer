@@ -344,7 +344,7 @@ and on how many days). You can see across all of it at once — that is the
 entire point. You are not summarising posts one by one. You are reporting on
 the night.
 
-Produce three sections, mirroring what he asked for:
+Produce four sections, mirroring what he asked for:
 
 1. Patterns — things visible only across multiple items. "Five YC companies
    launched in agriculture this batch" is one observation, not five findings.
@@ -352,7 +352,14 @@ Produce three sections, mirroring what he asked for:
    hit this." If nothing connects, this section can be empty.
 2. Worth reading — specific results that change something, each with a line
    on why it is worth his time.
-3. Someone built — the few new tools or releases that genuinely matter to him,
+3. Shipped — a significant release from a funded lab or company: a new model
+   or model class, a major product launch, a notable open-weight drop. This is
+   NOT for indie/personal projects — that is Someone built, below. Scale and
+   backing are the test: if a funded lab or a company with real users shipped
+   it, and it changes what is available or possible, it belongs here even on a
+   quiet night. A launch with huge engagement (points, comments, coverage) is
+   a strong signal it belongs here, not a reason to leave it out.
+4. Someone built — the few new tools or releases that genuinely matter to him,
    each with the problem it came from. This is a shortlist, not a catalogue:
    if twenty things shipped, name only the handful worth his attention and let
    the rest fold into a Pattern if they share a theme. At most 3 here; a wall
@@ -382,7 +389,7 @@ tonight — the few things you saw, as observations. Report; do not editorialize
   "the takeaway is", "what this means". He draws his own conclusions.
 - A few plain sentences. What happened, not what to think about it.
 
-Selection limits (hard): at most 3 items under "Someone built", and at most 8
+Selection limits (hard): at most 3 items under "Someone built", and at most 10
 items across the whole briefing. Be selective — pick the ones that matter and
 drop the rest.
 
@@ -400,7 +407,8 @@ Writing rules (these matter as much as what you select):
   in brackets in the input). Every item must cite at least one.
 
 Return a JSON object with keys night_summary, patterns, worth_reading,
-someone_built. Each section is an array of {headline, body, finding_ids}."""
+shipped, someone_built. Each section is an array of
+{headline, body, finding_ids}."""
 
 _SYNTHESIS_ITEM_SCHEMA = {
     "type": "object",
@@ -419,13 +427,18 @@ SYNTHESIS_SCHEMA = {
         "night_summary": {"type": "string"},
         "patterns": {"type": "array", "items": _SYNTHESIS_ITEM_SCHEMA},
         "worth_reading": {"type": "array", "items": _SYNTHESIS_ITEM_SCHEMA},
+        "shipped": {"type": "array", "items": _SYNTHESIS_ITEM_SCHEMA},
         "someone_built": {"type": "array", "items": _SYNTHESIS_ITEM_SCHEMA},
     },
-    "required": ["night_summary", "patterns", "worth_reading", "someone_built"],
+    "required": [
+        "night_summary", "patterns", "worth_reading", "shipped", "someone_built",
+    ],
     "additionalProperties": False,
 }
 
-SYNTHESIS_SECTIONS = ("patterns", "worth_reading", "someone_built")
+# Document/priority order. "shipped" (funded-lab launches) outranks
+# "someone_built" (indie projects) when the total cap forces a cut.
+SYNTHESIS_SECTIONS = ("patterns", "worth_reading", "shipped", "someone_built")
 
 
 def build_synthesis_messages(

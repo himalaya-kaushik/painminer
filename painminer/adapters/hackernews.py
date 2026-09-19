@@ -39,7 +39,7 @@ class HackerNewsAdapter(JsonApiAdapter):
     def __init__(self, source: dict[str, Any], client: httpx.Client) -> None:
         super().__init__(source, client)
         self.overlap_seconds: int = int(self.config.get("overlap_hours", 6) * 3600)
-        # A search is {tags?, query?}. Prefer the configured list; otherwise
+        # A search is {tags?, query?, min_points?}. Prefer the configured list; otherwise
         # fall back to the older `tags`-only behaviour for compatibility.
         searches = self.config.get("searches")
         if searches is None:
@@ -86,6 +86,8 @@ class HackerNewsAdapter(JsonApiAdapter):
         numeric = [f"{self.timestamp_field}>={lower}"]
         if upper is not None:
             numeric.append(f"{self.timestamp_field}<{upper}")
+        if search.get("min_points"):
+            numeric.append(f"points>={int(search['min_points'])}")
         numeric_filters = ",".join(numeric)
 
         page = 0

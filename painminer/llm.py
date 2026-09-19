@@ -1,12 +1,16 @@
 """LM Studio (Machine B) client — the one coupling point, `LLM_BASE_URL` (§12).
 
 Wraps the OpenAI-compatible API with schema-constrained JSON decoding, a
-timeout, and up to three attempts on transient network errors. v3 drives three
+timeout, and up to three attempts on transient network errors. v3 drives four
 different calls through it:
 
   * triage()      — pass 1, cheap, reasoning off, tiny output.
   * complete()    — pass 2 deep read, findings schema, reasoning per config.
   * synthesize()  — pass 3, one call, reasoning on, large output.
+  * embed()       — finding-statement embeddings for clustering (§8). Machine A
+                    never loads a model locally (no torch): embedding is just
+                    another Machine B endpoint, same client, same retry
+                    contract as every other call here.
 
 Thinking is on by default in LM Studio and burns ~95% of tokens, so
 `reasoning_effort` defaults to "none" everywhere and is only raised for the
@@ -64,6 +68,29 @@ class LLM:
         started = time.time()
         self.complete([{"role": "user", "content": "warmup"}])
         return time.time() - started
+
+    # --- embeddings (§8) -------------------------------------------------
+
+    def embed(self, texts: list[str]) -> list[list[float]]:
+        """Embed a batch of texts via Machine B's /v1/embeddings.
+
+        Same retry contract as complete(): up to MAX_NETWORK_ATTEMPTS on a
+        transient network error, other errors (e.g. a 4xx) propagate
+        immediately. Returns one vector per input text, in order.
+        """
+        last_exc: Exception | None = None
+        for attempt in range(1, MAX_NETWORK_ATTEMPTS + 1):
+            try:
+                resp = self.client.embeddings.create(
+                    model=self.config.embed_model, input=texts
+                )
+                return [d.embedding for d in resp.data]
+            except _RETRYABLE as exc:
+                last_exc = exc
+                if attempt < MAX_NETWORK_ATTEMPTS:
+                    time.sleep(min(2 ** (attempt - 1), 5))
+        assert last_exc is not None
+        raise last_exc
 
     # --- core structured completion -----------------------------------------
 

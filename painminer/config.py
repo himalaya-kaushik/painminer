@@ -35,8 +35,12 @@ class Config:
     # the submission cleared one of these (configurable).
     build_min_points: int = 50
     build_min_comments: int = 30
-    # Embedding + clustering (§8). Thresholds are starting points to tune.
-    embed_model: str = "BAAI/bge-small-en-v1.5"
+    # Embedding + clustering (§8). Embedding runs on Machine B via
+    # /v1/embeddings, same as every other model call — Machine A never loads a
+    # model locally (no torch/sentence-transformers). embed_model is the model
+    # id LM Studio reports (check `lms ps` or GET /v1/models), not a HF repo
+    # path. Thresholds below are starting points to tune.
+    embed_model: str = "bge-small"
     embed_batch_size: int = 64
     cluster_merge_threshold: float = 0.90    # >= -> auto-merge
     cluster_tiebreak_low: float = 0.75       # [low, merge) -> LLM tiebreak; below -> new
@@ -62,7 +66,7 @@ class Config:
     # Hard caps on the digest, enforced deterministically after synthesis so
     # they don't depend on the model obeying the prompt.
     digest_someone_built_cap: int = 3  # max items under "Someone built"
-    digest_total_cap: int = 8          # max items across the whole briefing
+    digest_total_cap: int = 10         # max items across the whole briefing
 
 
 # Maps a Config field to its .env variable name.
@@ -114,6 +118,10 @@ def load_config() -> Config:
         optional["cluster_merge_threshold"] = float(os.environ["CLUSTER_MERGE_THRESHOLD"])
     if os.getenv("CLUSTER_TIEBREAK_LOW"):
         optional["cluster_tiebreak_low"] = float(os.environ["CLUSTER_TIEBREAK_LOW"])
+    if os.getenv("EMBED_MODEL"):
+        optional["embed_model"] = os.environ["EMBED_MODEL"].strip()
+    if os.getenv("EMBED_BATCH_SIZE"):
+        optional["embed_batch_size"] = int(os.environ["EMBED_BATCH_SIZE"])
     if os.getenv("TRIAGE_MAX_CHARS"):
         optional["triage_max_chars"] = int(os.environ["TRIAGE_MAX_CHARS"])
     if os.getenv("DEEP_READ_REASONING"):

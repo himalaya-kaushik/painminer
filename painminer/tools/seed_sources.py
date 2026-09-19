@@ -28,6 +28,12 @@ HACKER_NEWS = {
         "searches": [
             {"tags": "ask_hn"},
             {"tags": "show_hn"},
+            # High-engagement front-page stories (launches, releases, big
+            # results) — everything else here is Ask/Show HN or a comment
+            # phrase search, so a major story submission (e.g. a big model
+            # launch) was previously never fetched at all. min_points is a
+            # server-side floor via numericFilters, keeps volume sane.
+            {"tags": "story", "min_points": 300},
             {"tags": "comment", "query": "I built"},
             {"tags": "comment", "query": "frustrated with"},
             {"tags": "comment", "query": "wish there was"},

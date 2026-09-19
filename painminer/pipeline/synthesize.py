@@ -200,8 +200,9 @@ def apply_caps(
     """Enforce the digest size limits deterministically (brief fixes 2 & 3).
 
     "Someone built" is capped first, then the whole briefing is capped in
-    document order (patterns, then worth_reading, then someone_built) so the
-    highest-value sections survive. Mutates and returns the result.
+    SYNTHESIS_SECTIONS priority order (patterns, worth_reading, shipped,
+    someone_built) so the highest-value sections survive a total-cap cut.
+    Mutates and returns the result.
     """
     if result.sections.get("someone_built"):
         result.sections["someone_built"] = result.sections["someone_built"][:someone_built_cap]

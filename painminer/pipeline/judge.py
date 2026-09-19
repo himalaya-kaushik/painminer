@@ -90,7 +90,13 @@ class JudgeRunSummary:
 # --- preflight --------------------------------------------------------------
 
 def preflight(llm: LLM, config: Config) -> None:
-    """Verify Machine B is reachable. On failure, alert and raise (§7.6)."""
+    """Verify Machine B is reachable and every model this run needs is loaded.
+
+    Checks llm_model (triage + deep read), embed_model (clustering, §8 — never
+    loaded locally on Machine A), and synthesis_model when it names a distinct
+    model. On any failure, a Telegram alert naming what's missing, then abort
+    before fetching (§7.6).
+    """
     try:
         models = llm.list_models()
     except Exception as exc:  # any transport/HTTP failure
@@ -103,13 +109,18 @@ def preflight(llm: LLM, config: Config) -> None:
         )
         raise PreflightError(f"preflight failed: {exc}") from exc
 
-    if config.llm_model not in models:
+    required = {"llm_model": config.llm_model, "embed_model": config.embed_model}
+    if config.synthesis_model and config.synthesis_model != config.llm_model:
+        required["synthesis_model"] = config.synthesis_model
+    missing = {name: value for name, value in required.items() if value not in models}
+    if missing:
+        detail = ", ".join(f"{name}={value!r}" for name, value in missing.items())
         send_telegram(
             config,
-            f"painminer: Machine B is up but model {config.llm_model!r} is not "
-            f"loaded (have: {', '.join(models)}). Aborting the run.",
+            f"painminer: Machine B is up but not every model is loaded "
+            f"({detail} not in: {', '.join(models)}). Aborting the run.",
         )
-        raise PreflightError(f"model {config.llm_model!r} not loaded on Machine B")
+        raise PreflightError(f"model(s) not loaded on Machine B: {detail}")
 
 
 # --- parse + validate -------------------------------------------------------

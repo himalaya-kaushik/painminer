@@ -1,10 +1,13 @@
 # Phase 1 dependencies only. Later phases add from the approved list:
-# python-telegram-bot, openai, sentence-transformers, httpx, pydantic.
+# python-telegram-bot, openai, httpx, pydantic.
+#
+# No torch / sentence-transformers: Machine A never loads a model locally.
+# Embedding runs on Machine B via /v1/embeddings (painminer/llm.py :: LLM.embed),
+# the same OpenAI-compatible client used for every other LLM call.
 supabase>=2.0
 python-dotenv>=1.0
 httpx>=0.26
 openai>=1.0
-sentence-transformers>=2.2
 python-telegram-bot>=20
 
 # Migration tooling only (migrate.py applies .sql over the pooler).

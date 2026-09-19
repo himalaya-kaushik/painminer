@@ -20,6 +20,9 @@ def _full_raw():
             {"headline": "", "body": "dropped, no headline", "finding_ids": [3]},
             {"headline": "Read this", "body": "Body B", "finding_ids": [4.0, 5]},
         ],
+        "shipped": [
+            {"headline": "Lab ships new model", "body": "Body C", "finding_ids": [6]},
+        ],
         "someone_built": [],
     })
 
@@ -36,6 +39,9 @@ def test_parse_full_briefing_dict():
     assert result.sections["worth_reading"] == [
         {"headline": "Read this", "body": "Body B", "finding_ids": [4, 5]},
     ]
+    assert result.sections["shipped"] == [
+        {"headline": "Lab ships new model", "body": "Body C", "finding_ids": [6]},
+    ]
     assert result.sections["someone_built"] == []
 
 
@@ -44,15 +50,33 @@ def test_parse_malformed_json_does_not_raise():
     assert isinstance(result, SynthesisResult)
     assert isinstance(result.night_summary, str)
     assert result.night_summary != ""
-    for section in ("patterns", "worth_reading", "someone_built"):
+    for section in ("patterns", "worth_reading", "shipped", "someone_built"):
         assert result.sections.get(section, []) == []
+
+
+def test_parse_missing_shipped_key_in_raw_json_defaults_empty():
+    # A raw response that omits "shipped" entirely (model didn't emit it, or
+    # an older recorded response) must not crash and must default to [].
+    raw = json.dumps({
+        "night_summary": "x", "patterns": [], "worth_reading": [], "someone_built": [],
+    })
+    result = _parse(raw, {})
+    assert result.sections["shipped"] == []
 
 
 def test_is_empty_true_when_all_sections_empty():
     result = SynthesisResult(sections={
-        "patterns": [], "worth_reading": [], "someone_built": [],
+        "patterns": [], "worth_reading": [], "shipped": [], "someone_built": [],
     })
     assert result.is_empty is True
+
+
+def test_is_empty_false_when_only_shipped_has_item():
+    result = SynthesisResult(sections={
+        "patterns": [], "worth_reading": [], "someone_built": [],
+        "shipped": [{"headline": "h", "body": "b", "finding_ids": []}],
+    })
+    assert result.is_empty is False
 
 
 def test_is_empty_false_when_any_section_has_item():

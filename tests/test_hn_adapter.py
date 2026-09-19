@@ -178,6 +178,28 @@ def test_searches_config_issues_configured_queries():
     assert items and all(it.source_id.startswith("c") for it in items)
 
 
+def test_min_points_adds_numeric_filter():
+    # A search with min_points must append "points>=N" to numericFilters so
+    # a high-engagement "story" search stays scoped server-side (§5 v3 brief:
+    # major launches were never fetched at all before this).
+    data = {"story": [
+        {"objectID": "s1", "created_at_i": 1100, "title": "Big launch"},
+    ]}
+    client = FakeAlgolia(data)
+    adapter = _adapter(client, {"searches": [{"tags": "story", "min_points": 300}]})
+    list(adapter.iter_items(1000, 1200))
+    assert client.seen_params
+    assert all("points>=300" in p.get("numericFilters", "") for p in client.seen_params)
+
+
+def test_no_min_points_omits_points_filter():
+    data = {"story": [{"objectID": "s1", "created_at_i": 1100, "title": "x"}]}
+    client = FakeAlgolia(data)
+    adapter = _adapter(client, {"searches": [{"tags": "story"}]})
+    list(adapter.iter_items(1000, 1200))
+    assert all("points" not in p.get("numericFilters", "") for p in client.seen_params)
+
+
 def test_query_filters_results():
     # A phrase present in only one comment returns just that one.
     data = {"comment": [
