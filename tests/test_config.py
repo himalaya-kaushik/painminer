@@ -39,7 +39,8 @@ def test_defaults_for_optional():
     cfg = _with_env(dict(_REQUIRED), config.load_config)
     assert cfg.max_run_minutes == 0    # 0 = no judge cap (dedicated local box)
     assert cfg.synthesis_reasoning == "none"
-    assert cfg.llm_timeout_seconds == 30.0
+    # Must exceed Machine B's measured ~54s cold start / model reload.
+    assert cfg.llm_timeout_seconds == 120.0
     assert cfg.llm_api_key == "lm-studio"
 
 

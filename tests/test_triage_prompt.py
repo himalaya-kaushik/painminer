@@ -21,7 +21,10 @@ def test_build_triage_messages_user_is_raw_text_verbatim():
 
 
 def test_triage_schema_shape():
-    assert TRIAGE_SCHEMA["required"] == ["worth_reading", "one_line"]
+    # Boolean-only on purpose: decode cost here is multiplied by every item
+    # in the queue, and nothing consumed the old one_line field.
+    assert TRIAGE_SCHEMA["required"] == ["worth_reading"]
+    assert "one_line" not in TRIAGE_SCHEMA["properties"]
     assert TRIAGE_SCHEMA["additionalProperties"] is False
     assert TRIAGE_SCHEMA["properties"]["worth_reading"]["type"] == "boolean"
 

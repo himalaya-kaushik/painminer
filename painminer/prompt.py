@@ -3,7 +3,7 @@
 v3 replaces the single per-item judge with three passes:
 
   * Pass 1 — triage (per item, cheap): is this worth a closer look at all?
-    TRIAGE_SYSTEM_PROMPT + TRIAGE_SCHEMA, decoded to {worth_reading, one_line}.
+    TRIAGE_SYSTEM_PROMPT + TRIAGE_SCHEMA, decoded to {worth_reading}.
   * Pass 2 — deep read (survivors only): the v2 extraction, now with the
     reader profile in the system prompt and thread context in the user turn.
     SYSTEM_PROMPT + FINDINGS_SCHEMA, via build_messages().
@@ -71,17 +71,22 @@ a research result that changes what is possible, a real signal about where
 the field or its money is moving, a genuinely new ML/infrastructure tool or
 release, or a problem people hit repeatedly that nothing solves.
 
-Return a JSON object: {"worth_reading": true|false, "one_line": "..."}.
-`one_line` is a terse (<=15 word) description of what the text is, in your
-own words — written for the reader, not a verdict."""
+Return a JSON object: {"worth_reading": true|false}. Nothing else — no
+explanation, no summary. This pass runs on every item and decode is the
+dominant cost, so every extra token is multiplied by the whole queue."""
 
+# Deliberately boolean-only. An earlier version also asked for a one-line
+# summary, which nothing ever consumed: ~25 wasted decode tokens per item, and
+# at Machine B's measured ~41 tok/s that was ~0.5s x every item in the queue
+# (~30 min on a 3k-item backlog). If triage diagnostics are wanted later, add
+# the field back together with a column to persist it — generating it and
+# discarding it is the one option that costs without paying.
 TRIAGE_SCHEMA = {
     "type": "object",
     "properties": {
         "worth_reading": {"type": "boolean"},
-        "one_line": {"type": "string"},
     },
-    "required": ["worth_reading", "one_line"],
+    "required": ["worth_reading"],
     "additionalProperties": False,
 }
 

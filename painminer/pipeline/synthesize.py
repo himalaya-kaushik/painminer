@@ -214,6 +214,25 @@ def apply_caps(
     return result
 
 
+def select_for_prompt(findings: list[dict], max_findings: int) -> list[dict]:
+    """The subset of tonight's findings that goes into the pass-3 prompt.
+
+    Highest confidence first, then newest, so a hard cap drops the weakest
+    material rather than an arbitrary slice. A backlog night can produce
+    hundreds of findings; feeding all of them risks both the synthesis
+    timeout and the model's context window, and a capped digest can only use
+    a handful anyway. Returns them in id order so the block reads stably.
+    """
+    if max_findings <= 0 or len(findings) <= max_findings:
+        return findings
+    ranked = sorted(
+        findings,
+        key=lambda f: (f.get("confidence") or 0.0, f.get("created_at") or ""),
+        reverse=True,
+    )[:max_findings]
+    return sorted(ranked, key=lambda f: f["id"])
+
+
 def synthesize_night(
     db: DB,
     llm: LLM,
@@ -224,8 +243,11 @@ def synthesize_night(
     """Run pass 3 over tonight's findings + the recurring shortlist."""
     since = _since(run_started_at)
     findings, index = gather_tonight(db, since)
+    # Index keeps every finding (so a cited id still resolves its url/cluster
+    # even if it was cut from the prompt); only the prompt block is capped.
+    selected = select_for_prompt(findings, config.synthesis_max_findings)
     messages = build_synthesis_messages(
-        findings_block(findings), shortlist_block(db, config)
+        findings_block(selected), shortlist_block(db, config)
     )
     raw = llm.synthesize(messages, SYNTHESIS_SCHEMA)
     result = _parse(raw, index)

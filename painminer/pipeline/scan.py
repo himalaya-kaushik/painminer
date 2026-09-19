@@ -54,6 +54,9 @@ class ScanSummary:
     judge_seconds: float = 0.0
     seconds: float = 0.0
     stopped_on_budget: bool = False
+    # Non-fatal per-stage failures (embed/cluster/rank), so a late hiccup is
+    # visible in the report instead of silently degrading recurrence.
+    stage_errors: dict[str, str] = field(default_factory=dict)
     # Pass 3 / delivery (§3, §4)
     synthesis: "synth_stage.SynthesisResult | None" = None
     digest_path: str | None = None
@@ -75,7 +78,12 @@ def run_scan(
     *,
     embedder: Embedder | None = None,
     progress=None,
+    max_items: int | None = None,
 ) -> ScanSummary:
+    """Full pipeline. `max_items` bounds the judge stage only — it exists so
+    the whole chain (judge -> embed -> cluster -> rank -> synthesis -> digest
+    -> delivery) can be smoke-tested end to end in minutes before committing
+    to a multi-hour backlog drain."""
     progress = progress or _noop
     started = time.time()
     summary = ScanSummary()
@@ -116,7 +124,8 @@ def run_scan(
     def judge_progress(js: judge_stage.JudgeRunSummary) -> None:
         progress(f"Judging: {js.items_judged} judged, {js.findings_created} findings…")
 
-    js = judge_stage.run_judge(db, llm, config, progress=judge_progress)
+    js = judge_stage.run_judge(db, llm, config, progress=judge_progress,
+                               max_items=max_items)
     summary.judge_seconds = time.time() - t0
     summary.judged = js.items_judged
     summary.empty = js.empty_results
@@ -137,16 +146,34 @@ def run_scan(
         ).eq("name", name).execute()
 
     # --- embed + cluster + rank ---------------------------------------------
-    embedder = embedder or Embedder.from_config(config)
-    summary.embedded = embed_findings(db, embedder, config.embed_batch_size)
-    progress(f"Embedded {summary.embedded} findings")
+    # These run AFTER the whole judge pass, so a transient failure here used to
+    # destroy hours of completed work and produce no digest at all. They only
+    # feed clustering/recurrence — pass 3 reads findings directly — so each is
+    # non-fatal: record the error, carry on, still deliver tonight's briefing.
+    # A skipped embed/cluster just means recurrence lags a night; the backfill
+    # is idempotent and the next run picks it up.
+    try:
+        embedder = embedder or Embedder.from_config(config)
+        summary.embedded = embed_findings(db, embedder, config.embed_batch_size)
+        progress(f"Embedded {summary.embedded} findings")
+    except Exception as exc:
+        summary.stage_errors["embed"] = f"{type(exc).__name__}: {exc}"
+        progress(f"Embed FAILED (non-fatal, digest continues): {exc}")
 
-    cs = cluster_stage.cluster_findings(db, llm, config)
-    summary.new_clusters = cs.new_clusters
-    progress(f"Clustered: {cs.new_clusters} new clusters, {cs.auto_merges + cs.tiebreak_merges} merges")
+    try:
+        cs = cluster_stage.cluster_findings(db, llm, config)
+        summary.new_clusters = cs.new_clusters
+        progress(f"Clustered: {cs.new_clusters} new clusters, {cs.auto_merges + cs.tiebreak_merges} merges")
+    except Exception as exc:
+        summary.stage_errors["cluster"] = f"{type(exc).__name__}: {exc}"
+        progress(f"Cluster FAILED (non-fatal, digest continues): {exc}")
 
-    rs = rank_stage.rank_clusters(db)
-    progress(f"Ranked {rs.ranked} clusters")
+    try:
+        rs = rank_stage.rank_clusters(db)
+        progress(f"Ranked {rs.ranked} clusters")
+    except Exception as exc:
+        summary.stage_errors["rank"] = f"{type(exc).__name__}: {exc}"
+        progress(f"Rank FAILED (non-fatal, digest continues): {exc}")
 
     # --- pass 3: synthesis + the digest document (§3, §4) --------------------
     progress("Synthesising the night…")

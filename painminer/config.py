@@ -29,7 +29,14 @@ class Config:
     # there is nothing to budget against; set a positive value only to bound a
     # cloud/cron run.
     max_run_minutes: int = 0
-    llm_timeout_seconds: float = 30.0  # per-call timeout (§7.6)
+    # Per-call timeout (§7.6). MUST exceed Machine B's cold start: warmup was
+    # measured at 53.7s, and LM Studio evicts/reloads models when several are
+    # resident against its memory ceiling — so any call landing during a reload
+    # takes far longer than a naive 30s. A too-short timeout here was the root
+    # cause of both the "crashed on one timeout" and "one item retried 46
+    # times" failures: the timeouts were never the item's fault, they were the
+    # budget being shorter than a model load.
+    llm_timeout_seconds: float = 120.0
     llm_api_key: str = "lm-studio"     # LM Studio ignores it; the SDK needs one
     # `build` engagement rule: a launch with no stated problem still counts if
     # the submission cleared one of these (configurable).
@@ -48,7 +55,13 @@ class Config:
     # Three-pass reader (v3 brief §3). Reasoning is off by default (LM Studio
     # thinks by default and it burns ~95% of tokens); raise only where judgment
     # matters. Values are LM Studio's reasoning_effort levels.
-    triage_max_chars: int = 4000       # pass-1 truncation (haystack reduction)
+    # Pass-1 truncation. Triage only needs enough to judge plausibility, and
+    # the deep read always sees the FULL text, so truncating here costs no
+    # extraction quality — only candidate recall. Measured on real queue items
+    # (boolean-only triage): 4000 chars = 0.70s/item, 1200 = 0.48s, with
+    # identical verdicts. 2000 is the middle: keeps launch/announcement context
+    # (the "Shipped" section depends on it) while roughly halving prefill.
+    triage_max_chars: int = 2000
     deep_read_reasoning: str = "none"  # pass 2; A/B "low" once running
     thread_context_chars: int = 6000   # cap on fetched thread context (pass 2)
     # Pass 3: qwen-extract is extraction-tuned — any reasoning_effort > none
@@ -60,8 +73,16 @@ class Config:
     # llm_model. Set to the model id LM Studio reports.
     synthesis_model: str = "qwen/qwen3.6-35b-a3b"
     synthesis_max_tokens: int = 6000             # room for a full briefing
-    synthesis_timeout_seconds: float = 300.0     # pass 3 is one long call
+    # Pass 3 is one long call and scales with the findings block: the 35b took
+    # ~149s on a ~33k-char prompt, so a backlog night (hundreds of findings)
+    # needs real headroom or the digest dies after the whole judge pass.
+    synthesis_timeout_seconds: float = 900.0
     synthesis_shortlist: int = 40      # top-N recurring clusters fed to pass 3
+    # Hard cap on how many of tonight's findings go into the pass-3 prompt,
+    # highest-confidence first. Without it a 3000-item backlog produces a
+    # ~135k-char prompt that risks both the timeout and the context window.
+    # 250 is still far more material than a 10-item digest can use.
+    synthesis_max_findings: int = 250
     digests_dir: str = "digests"       # where YYYY-MM-DD.md is written (§4)
     # Hard caps on the digest, enforced deterministically after synthesis so
     # they don't depend on the model obeying the prompt.
@@ -138,6 +159,8 @@ def load_config() -> Config:
         optional["synthesis_timeout_seconds"] = float(os.environ["SYNTHESIS_TIMEOUT_SECONDS"])
     if os.getenv("SYNTHESIS_SHORTLIST"):
         optional["synthesis_shortlist"] = int(os.environ["SYNTHESIS_SHORTLIST"])
+    if os.getenv("SYNTHESIS_MAX_FINDINGS"):
+        optional["synthesis_max_findings"] = int(os.environ["SYNTHESIS_MAX_FINDINGS"])
     if os.getenv("DIGESTS_DIR"):
         optional["digests_dir"] = os.environ["DIGESTS_DIR"].strip()
     if os.getenv("DIGEST_SOMEONE_BUILT_CAP"):

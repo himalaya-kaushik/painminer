@@ -133,27 +133,26 @@ class LLM:
     # --- pass 1: triage ------------------------------------------------------
 
     def triage(self, source_text: str) -> dict:
-        """Pass-1 triage: {"worth_reading": bool, "one_line": str}.
+        """Pass-1 triage: {"worth_reading": bool}.
 
-        Reasoning stays off — this runs on everything, so speed wins. A
-        malformed answer is treated conservatively as worth_reading=True (a
-        false positive is cheap; a dropped signal is not).
+        Reasoning stays off and the output is boolean-only — this runs on
+        every item in the queue, so decode tokens here are multiplied by the
+        whole backlog (see TRIAGE_SCHEMA). max_tokens is tight for the same
+        reason. A malformed answer is treated conservatively as
+        worth_reading=True (a false positive is cheap; a dropped signal is not).
         """
         raw = self._structured(
             build_triage_messages(source_text),
             schema=TRIAGE_SCHEMA,
             schema_name="triage",
             reasoning_effort="none",
-            max_tokens=120,
+            max_tokens=16,
         )
         try:
             data = json.loads(raw)
-            return {
-                "worth_reading": bool(data.get("worth_reading")),
-                "one_line": str(data.get("one_line") or ""),
-            }
+            return {"worth_reading": bool(data.get("worth_reading"))}
         except (json.JSONDecodeError, AttributeError):
-            return {"worth_reading": True, "one_line": ""}
+            return {"worth_reading": True}
 
     # --- pass 2: deep read ---------------------------------------------------
 

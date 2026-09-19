@@ -130,3 +130,37 @@ def test_findings_block_joins_lines():
     assert len(lines) == 2
     assert lines[0].startswith("[1]")
     assert lines[1].startswith("[2]")
+
+
+# --- prompt-size cap (select_for_prompt) ------------------------------------
+
+def _f(i, conf, created="2026-09-19T00:00:00+00:00"):
+    return {"id": i, "kind": "pain", "statement": f"s{i}", "confidence": conf,
+            "created_at": created}
+
+
+def test_select_for_prompt_returns_all_when_under_cap():
+    from painminer.pipeline.synthesize import select_for_prompt
+    findings = [_f(1, 0.5), _f(2, 0.9)]
+    assert select_for_prompt(findings, 250) == findings
+
+
+def test_select_for_prompt_keeps_highest_confidence_and_sorts_by_id():
+    from painminer.pipeline.synthesize import select_for_prompt
+    findings = [_f(1, 0.10), _f(2, 0.95), _f(3, 0.50), _f(4, 0.90)]
+    out = select_for_prompt(findings, 2)
+    # the two strongest (ids 2 and 4) survive, returned in id order
+    assert [f["id"] for f in out] == [2, 4]
+
+
+def test_select_for_prompt_zero_or_negative_cap_disables_capping():
+    from painminer.pipeline.synthesize import select_for_prompt
+    findings = [_f(1, 0.5), _f(2, 0.9)]
+    assert select_for_prompt(findings, 0) == findings
+
+
+def test_select_for_prompt_handles_missing_confidence():
+    from painminer.pipeline.synthesize import select_for_prompt
+    findings = [{"id": 1, "statement": "a"}, _f(2, 0.9)]
+    out = select_for_prompt(findings, 1)
+    assert [f["id"] for f in out] == [2]   # the one with real confidence wins

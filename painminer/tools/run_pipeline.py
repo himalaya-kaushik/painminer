@@ -90,6 +90,9 @@ def main() -> None:
         counts = " · ".join(f"{s}={len(r.sections.get(s, []))}"
                             for s in ("patterns", "worth_reading", "shipped", "someone_built"))
         print(f"Synthesis: {counts}  |  \"{r.night_summary[:120]}\"")
+    if summary.stage_errors:
+        for stage, err in summary.stage_errors.items():
+            print(f"STAGE DEGRADED — {stage}: {err}")
     if summary.synthesis_error:
         print(f"Synthesis ERROR: {summary.synthesis_error}")
     print(f"Total wall-clock: {summary.seconds:.0f}s"
