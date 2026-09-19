@@ -98,10 +98,9 @@ class JudgeRunSummary:
 def preflight(llm: LLM, config: Config) -> None:
     """Verify Machine B is reachable and every model this run needs is loaded.
 
-    Checks llm_model (triage + deep read), embed_model (clustering, §8 — never
-    loaded locally on Machine A), and synthesis_model when it names a distinct
-    model. On any failure, a Telegram alert naming what's missing, then abort
-    before fetching (§7.6).
+    Checks llm_model (all three passes) and embed_model (clustering, §8 —
+    never loaded locally on Machine A). On any failure, a Telegram alert
+    naming what's missing, then abort before fetching (§7.6).
     """
     try:
         models = llm.list_models()
@@ -116,8 +115,6 @@ def preflight(llm: LLM, config: Config) -> None:
         raise PreflightError(f"preflight failed: {exc}") from exc
 
     required = {"llm_model": config.llm_model, "embed_model": config.embed_model}
-    if config.synthesis_model and config.synthesis_model != config.llm_model:
-        required["synthesis_model"] = config.synthesis_model
     missing = {name: value for name, value in required.items() if value not in models}
     if missing:
         detail = ", ".join(f"{name}={value!r}" for name, value in missing.items())

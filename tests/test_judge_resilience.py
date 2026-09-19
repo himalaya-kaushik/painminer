@@ -123,7 +123,7 @@ class FlakyLLM:
         return 0.0
 
     def triage(self, _text):
-        return {"worth_reading": True, "one_line": ""}
+        return {"worth_reading": True}
 
     def complete(self, messages):
         self.calls += 1
@@ -139,7 +139,7 @@ def _config():
     return Config(
         supabase_url="u", supabase_service_key="k", telegram_token="t",
         telegram_chat_id="c", llm_base_url="http://x/v1", llm_model="m",
-        embed_model="e", synthesis_model="m",
+        embed_model="e",
     )
 
 

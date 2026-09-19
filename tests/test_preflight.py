@@ -1,5 +1,5 @@
-"""judge.preflight — verifies llm_model, embed_model, and synthesis_model are
-all loaded on Machine B before a run starts (task: embedding-on-B preflight
+"""judge.preflight — verifies llm_model and embed_model are
+both loaded on Machine B before a run starts (task: embedding-on-B preflight
 extension). Offline: monkeypatches judge.send_telegram so no network call is
 made, and restores it afterward (plain functions, no pytest fixtures, matching
 the repo's test-runner conventions)."""
@@ -26,7 +26,7 @@ def _config(**overrides):
     base = dict(
         supabase_url="u", supabase_service_key="k", telegram_token="t",
         telegram_chat_id="c", llm_base_url="http://x/v1", llm_model="qwen-extract",
-        embed_model="bge-small", synthesis_model="qwen3.6-35b",
+        embed_model="bge-small",
     )
     base.update(overrides)
     return Config(**base)
@@ -101,19 +101,7 @@ def test_preflight_reports_all_missing_models_together():
             assert False, "expected PreflightError"
         except PreflightError as exc:
             msg = str(exc)
-            assert "llm_model" in msg and "embed_model" in msg and "synthesis_model" in msg
-
-    _patched(run)
-
-
-def test_preflight_skips_synthesis_model_check_when_same_as_llm_model():
-    # synthesis_model == llm_model: only two distinct models required, not three.
-    llm = FakeLLM(["qwen-extract", "bge-small"])
-    config = _config(synthesis_model="qwen-extract")
-
-    def run(alerts):
-        preflight(llm, config)   # must not raise: no separate synthesis check
-        assert alerts == []
+            assert "llm_model" in msg and "embed_model" in msg
 
     _patched(run)
 

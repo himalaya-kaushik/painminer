@@ -177,7 +177,6 @@ class LLM:
             reasoning_effort=self.config.synthesis_reasoning,
             max_tokens=self.config.synthesis_max_tokens,
             timeout=self.config.synthesis_timeout_seconds,
-            model=self.config.synthesis_model or None,
         )
 
     # --- clustering tiebreak (§8) -------------------------------------------

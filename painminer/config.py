@@ -68,12 +68,14 @@ class Config:
     # spends the whole token budget on thinking and returns EMPTY content
     # (A/B'd live: "medium" -> unparseable, "none" -> clean JSON). Keep it off.
     synthesis_reasoning: str = "none"            # pass 3: the product
-    # Pass 3 is cross-item synthesis, not extraction — use a general/reasoning
-    # model when one is served, not the extraction model. Empty = reuse
-    # llm_model. Set to the model id LM Studio reports.
-    synthesis_model: str = "qwen/qwen3.6-35b-a3b"
+    # NB: there is deliberately no separate synthesis model. All three passes
+    # run on llm_model. An earlier version pointed pass 3 at
+    # "qwen/qwen3.6-35b-a3b" believing it was a bigger model, but that is just
+    # another LM Studio alias for the same weights (a request for it comes back
+    # `served as: qwen-extract`, byte-identical output). The digest quality win
+    # attributed to it actually came from de-parroting SYNTHESIS_SYSTEM_PROMPT.
     synthesis_max_tokens: int = 6000             # room for a full briefing
-    # Pass 3 is one long call and scales with the findings block: the 35b took
+    # Pass 3 is one long call and scales with the findings block: it took
     # ~149s on a ~33k-char prompt, so a backlog night (hundreds of findings)
     # needs real headroom or the digest dies after the whole judge pass.
     synthesis_timeout_seconds: float = 900.0
@@ -151,8 +153,6 @@ def load_config() -> Config:
         optional["thread_context_chars"] = int(os.environ["THREAD_CONTEXT_CHARS"])
     if os.getenv("SYNTHESIS_REASONING"):
         optional["synthesis_reasoning"] = os.environ["SYNTHESIS_REASONING"].strip()
-    if os.getenv("SYNTHESIS_MODEL"):
-        optional["synthesis_model"] = os.environ["SYNTHESIS_MODEL"].strip()
     if os.getenv("SYNTHESIS_MAX_TOKENS"):
         optional["synthesis_max_tokens"] = int(os.environ["SYNTHESIS_MAX_TOKENS"])
     if os.getenv("SYNTHESIS_TIMEOUT_SECONDS"):

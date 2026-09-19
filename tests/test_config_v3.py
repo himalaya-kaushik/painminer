@@ -44,13 +44,12 @@ def test_defaults_via_direct_construction():
     )
     assert cfg.digest_someone_built_cap == 3
     assert cfg.digest_total_cap == 10
-    assert cfg.synthesis_model == "qwen/qwen3.6-35b-a3b"
     assert cfg.synthesis_reasoning == "none"
     assert cfg.max_run_minutes == 0
 
 
 def test_env_overrides_via_load_config():
-    env = dict(_REQUIRED, DIGEST_TOTAL_CAP="5", SYNTHESIS_MODEL="foo")
+    env = dict(_REQUIRED, DIGEST_TOTAL_CAP="5", SYNTHESIS_REASONING="low")
     cfg = _with_env(env, config.load_config)
     assert cfg.digest_total_cap == 5
-    assert cfg.synthesis_model == "foo"
+    assert cfg.synthesis_reasoning == "low"
