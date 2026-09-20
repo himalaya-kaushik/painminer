@@ -1,0 +1,83 @@
+name: nightly
+
+on:
+  schedule:
+    - cron: '15 16 * * *'   # 16:15 UTC = 21:45 IST
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: nightly
+  cancel-in-progress: false
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    environment: nightly
+    timeout-minutes: 5
+    steps:
+      - run: echo "Approved at $(date -u) UTC"
+
+  run:
+    needs: gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.12'
+          cache: pip
+
+      - name: Join tailnet
+        uses: tailscale/github-action@306e68a486fd2350f2bfc3b19fcd143891a4a2d8 # v4
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+          tags: tag:ci
+          version: latest
+
+      - name: Preflight - is the model host actually up?
+        run: |
+          set -euo pipefail
+          if ! curl -sSf -m 30 http://llm-host:1234/v1/models -o /tmp/models.json; then
+            echo "::error::llm-host unreachable. Machine asleep, LM Studio down, or VPN on."
+            exit 1
+          fi
+          for m in qwen-extract bge-small; do
+            grep -q "\"$m\"" /tmp/models.json || { echo "::error::model $m not loaded"; exit 1; }
+          done
+          echo "preflight OK"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run pipeline
+        env:
+          SUPABASE_URL:         ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          TELEGRAM_TOKEN:       ${{ secrets.TELEGRAM_TOKEN }}
+          TELEGRAM_CHAT_ID:     ${{ secrets.TELEGRAM_CHAT_ID }}
+          LLM_BASE_URL:         http://llm-host:1234/v1
+          LLM_MODEL:            qwen-extract
+          EMBED_MODEL:          bge-small
+          MAX_RUN_MINUTES:      '45'
+        run: python -m painminer.tools.run_pipeline
+
+      - name: Alert on failure
+        if: failure()
+        env:
+          TELEGRAM_TOKEN:   ${{ secrets.TELEGRAM_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          curl -sS -X POST \
+            "https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage" \
+            -d chat_id="${TELEGRAM_CHAT_ID}" \
+            -d text="Nightly run FAILED. See: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+            >/dev/null

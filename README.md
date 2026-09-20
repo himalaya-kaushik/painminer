@@ -1,42 +1,38 @@
-# Painminer — personal runbook
+# Painminer
 
-Machine A runs Painminer. Machine B runs LM Studio. Both machines must be on the same LAN. Turn off the VPN on Machine A before a run.
+Painminer scans sources (Hacker News, and other adapters in `painminer/adapters/`) for posts that
+describe a real pain point, uses an LLM to triage, deep-read, and extract findings from each item,
+clusters recurring findings, and synthesizes a nightly digest that's sent to Telegram.
 
-## One-time setup
+It needs two backing services: a Postgres/Supabase database, and an OpenAI-compatible LLM endpoint
+(e.g. a local [LM Studio](https://lmstudio.ai) server) for triage, extraction, and embeddings.
 
-### Machine B — LM Studio
-
-1. Open LM Studio and start its local server with LAN access enabled.
-2. Load these two models. Their IDs must appear in LM Studio's loaded-model list:
-
-   - `qwen-extract`
-   - `bge-small`
-
-3. Leave LM Studio running. Its host and port must match `LLM_BASE_URL` in Machine A's `.env`.
-
-### Machine A — Painminer
-
-From the project folder:
+## Setup
 
 ```bash
 python3 -m venv .venv
 .venv/bin/pip install -r requirements.txt
 ```
 
-Create `.env` once with your Supabase, Telegram, and Machine B details:
+Create `.env` with the following:
 
 ```dotenv
 SUPABASE_URL=https://<project-ref>.supabase.co
 SUPABASE_SERVICE_KEY=<service-role-key>
-SUPABASE_DB_URL=postgresql://postgres:<password>@db.<project-ref>.supabase.co:5432/postgres
 TELEGRAM_TOKEN=<bot-token>
 TELEGRAM_CHAT_ID=<your-chat-id>
-LLM_BASE_URL=http://<machine-b-lan-ip>:1234/v1
-LLM_MODEL=qwen-extract
-EMBED_MODEL=bge-small
+LLM_BASE_URL=http://<llm-host>:1234/v1
+LLM_MODEL=<extraction-model-id>
 ```
 
-For a new Supabase database only, enable `vector` in the Supabase SQL editor, then run this once:
+`LLM_BASE_URL` must point to an OpenAI-compatible endpoint (LM Studio, vLLM, etc.) that serves the
+model named by `LLM_MODEL`. Embeddings use the same endpoint; the model id defaults to `bge-small`
+and can be overridden with `EMBED_MODEL`. See `painminer/config.py` for the full list of optional
+overrides (timeouts, run caps, clustering thresholds, digest limits, etc.) and their defaults.
+
+### Database migration (one-time, per database)
+
+Enable the `vector` extension in the Supabase SQL editor, then run:
 
 ```bash
 for file in sql/schema.sql sql/add_metadata.sql sql/add_thread_id.sql sql/judge.sql sql/queue.sql sql/queue_fair.sql sql/cluster.sql sql/add_pin.sql; do
@@ -45,26 +41,32 @@ done
 .venv/bin/python -m painminer.tools.seed_sources
 ```
 
-Do not re-run the database setup for normal daily runs.
+Do not re-run this for normal runs.
 
-## Daily run
+## Running
 
-1. On Machine B: open LM Studio, start the server, and load `qwen-extract` and `bge-small`.
-2. On Machine A: turn off VPN, open this project folder, then run:
+Make sure the LLM server is up and has the extraction and embedding models loaded, then:
 
 ```bash
 .venv/bin/python -m painminer.tools.run_pipeline
 ```
 
-That is it. The digest is saved in `digests/` and sent to your configured Telegram chat.
+This scans configured sources, triages and extracts findings, clusters them, synthesizes a digest,
+writes it to `digests/`, and sends it to the configured Telegram chat.
 
-If it stops at `Preflight: checking Machine B…`, Machine A cannot see LM Studio or one of those two models is not loaded. Check exactly what Machine A sees with:
+### Troubleshooting
+
+If it stops at `Preflight: checking …`, painminer can't reach the LLM endpoint, or one of the
+required models isn't loaded there. Check what's actually visible at `LLM_BASE_URL`:
 
 ```bash
 .venv/bin/python -c 'from painminer.config import load_config; from painminer.llm import LLM; print("\n".join(LLM(load_config()).list_models()))'
 ```
 
-Optional: keep the Telegram interface running instead of starting the pipeline manually:
+### Optional: Telegram bot mode
+
+Instead of running the pipeline manually, you can keep a long-running bot process and trigger a
+scan on demand:
 
 ```bash
 .venv/bin/python -m painminer.delivery.telegram_bot

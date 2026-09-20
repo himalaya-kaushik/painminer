@@ -1,0 +1,27 @@
+name: nightly-timeout
+
+on:
+  schedule:
+    - cron: '15 18 * * *'   # 18:15 UTC = 23:45 IST
+  workflow_dispatch:
+
+permissions:
+  actions: write
+
+jobs:
+  cancel:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Cancel nightly runs still awaiting approval
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          ids=$(gh api "repos/${{ github.repository }}/actions/workflows/nightly.yml/runs?status=waiting" \
+                  --jq '.workflow_runs[].id')
+          if [ -z "$ids" ]; then echo "nothing pending"; exit 0; fi
+          for id in $ids; do
+            echo "cancelling run $id (never approved)"
+            gh api -X POST "repos/${{ github.repository }}/actions/runs/$id/cancel" || true
+          done
