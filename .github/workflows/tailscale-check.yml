@@ -1,0 +1,74 @@
+# Connectivity test only. Proves GitHub can reach the LM Studio host over
+# Tailscale. Runs only when you click "Run workflow" - no schedule.
+name: tailscale-check
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Join tailnet
+        uses: tailscale/github-action@306e68a486fd2350f2bfc3b19fcd143891a4a2d8 # v4
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+          tags: tag:ci
+          version: latest
+
+      - name: Show runner tailnet identity
+        run: tailscale status || true
+
+      - name: Reach LM Studio
+        run: |
+          set -euo pipefail
+          echo "--- resolving llm-host ---"
+          tailscale ip -4 llm-host || echo "(name lookup failed; trying anyway)"
+          echo "--- GET /v1/models ---"
+          code=$(curl -sS -m 30 -o /tmp/models.json -w '%{http_code}' http://llm-host:1234/v1/models)
+          echo "HTTP $code"
+          test "$code" = "200"
+          python3 - <<'PY'
+          import json
+          d = json.load(open('/tmp/models.json'))
+          for m in d['data']:
+              print(' -', m['id'])
+          PY
+
+      - name: Chat round-trip
+        run: |
+          set -euo pipefail
+          curl -sS -m 300 http://llm-host:1234/v1/chat/completions \
+            -H 'Content-Type: application/json' \
+            -d '{"model":"qwen-extract","messages":[{"role":"user","content":"Reply with exactly this JSON and nothing else: {\"ok\":true}"}],"temperature":0,"reasoning_effort":"none"}' \
+            -o /tmp/chat.json
+          python3 - <<'PY'
+          import json
+          d = json.load(open('/tmp/chat.json'))
+          c = d['choices'][0]['message']['content']
+          r = d['usage']['completion_tokens_details']['reasoning_tokens']
+          print('content:', repr(c))
+          print('reasoning_tokens:', r)
+          assert 'ok' in c, 'unexpected content'
+          print('PASS')
+          PY
+
+      - name: Embedding round-trip
+        run: |
+          set -euo pipefail
+          curl -sS -m 60 http://llm-host:1234/v1/embeddings \
+            -H 'Content-Type: application/json' \
+            -d '{"model":"bge-small","input":"hello world"}' \
+            -o /tmp/emb.json
+          python3 - <<'PY'
+          import json
+          v = json.load(open('/tmp/emb.json'))['data'][0]['embedding']
+          print('dimensions:', len(v))
+          assert len(v) == 384, 'expected 384, got %d' % len(v)
+          print('PASS')
+          PY
