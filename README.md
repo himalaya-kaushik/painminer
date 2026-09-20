@@ -7,11 +7,10 @@ Machine A runs Painminer. Machine B runs LM Studio. Both machines must be on the
 ### Machine B — LM Studio
 
 1. Open LM Studio and start its local server with LAN access enabled.
-2. Load these models. Their IDs must appear in LM Studio's loaded-model list:
+2. Load these two models. Their IDs must appear in LM Studio's loaded-model list:
 
    - `qwen-extract`
    - `bge-small`
-   - `qwen/qwen3.6-35b-a3b`
 
 3. Leave LM Studio running. Its host and port must match `LLM_BASE_URL` in Machine A's `.env`.
 
@@ -50,7 +49,7 @@ Do not re-run the database setup for normal daily runs.
 
 ## Daily run
 
-1. On Machine B: open LM Studio, start the server, and load the three models above.
+1. On Machine B: open LM Studio, start the server, and load `qwen-extract` and `bge-small`.
 2. On Machine A: turn off VPN, open this project folder, then run:
 
 ```bash
@@ -59,7 +58,7 @@ Do not re-run the database setup for normal daily runs.
 
 That is it. The digest is saved in `digests/` and sent to your configured Telegram chat.
 
-If it stops at `Preflight: checking Machine B…`, Machine A cannot see LM Studio or one of the three models is not loaded. Check exactly what Machine A sees with:
+If it stops at `Preflight: checking Machine B…`, Machine A cannot see LM Studio or one of those two models is not loaded. Check exactly what Machine A sees with:
 
 ```bash
 .venv/bin/python -c 'from painminer.config import load_config; from painminer.llm import LLM; print("\n".join(LLM(load_config()).list_models()))'
