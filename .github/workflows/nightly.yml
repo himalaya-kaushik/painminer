@@ -24,7 +24,7 @@ jobs:
   run:
     needs: gate
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 120
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
@@ -67,8 +67,22 @@ jobs:
           LLM_BASE_URL:         http://llm-host:1234/v1
           LLM_MODEL:            qwen-extract
           EMBED_MODEL:          bge-small
-          MAX_RUN_MINUTES:      '45'
-        run: python -m painminer.tools.run_pipeline
+        run: python -m painminer.tools.run_pipeline 2>&1 | tee /tmp/pipeline-output.log
+
+      - name: Upload digest
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: digest
+          path: digests/
+          if-no-files-found: warn
+
+      - name: Publish pipeline report to job summary
+        if: always()
+        run: |
+          if [ -f /tmp/pipeline-output.log ]; then
+            awk '/PIPELINE REPORT/{found=1} found' /tmp/pipeline-output.log >> "$GITHUB_STEP_SUMMARY"
+          fi
 
       - name: Alert on failure
         if: failure()
