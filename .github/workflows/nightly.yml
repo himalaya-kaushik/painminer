@@ -1,13 +1,14 @@
 name: nightly
 
+# Triggered by pg_cron on Supabase at 16:15 UTC (21:45 IST), which POSTs to
+# this workflow's dispatch endpoint. GitHub's own `schedule:` trigger was
+# removed: its global queue delayed this run by 2-4 hours on consecutive
+# nights. Do not add `schedule:` back.
 on:
-  schedule:
-    - cron: '15 16 * * *'   # 16:15 UTC = 21:45 IST
   workflow_dispatch:
 
 permissions:
   contents: read
-  actions: read
 
 concurrency:
   group: nightly
@@ -20,6 +21,48 @@ jobs:
     timeout-minutes: 5
     steps:
       - run: echo "Approved at $(date -u) UTC"
+
+  # Runs in parallel with `gate`. If the approval never comes, cancel the whole
+  # run so it does not sit waiting forever. This used to be a separate workflow
+  # on its own cron; the two crons drifted independently and the guard killed a
+  # legitimate run, so it now measures from THIS run's own start.
+  guard:
+    runs-on: ubuntu-latest
+    timeout-minutes: 130
+    permissions:
+      actions: write
+    steps:
+      - name: Cancel run if the gate is never approved
+        env:
+          GH_TOKEN:         ${{ secrets.GITHUB_TOKEN }}
+          TELEGRAM_TOKEN:   ${{ secrets.TELEGRAM_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          RUN_URL:          ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          deadline=$(( SECONDS + 120*60 ))
+          seen_pending=0
+
+          while [ "$SECONDS" -lt "$deadline" ]; do
+            pending=$(gh api               "repos/${{ github.repository }}/actions/runs/${{ github.run_id }}/pending_deployments"               --jq 'length' 2>/dev/null || echo 0)
+
+            if [ "$pending" -gt 0 ]; then
+              seen_pending=1
+            elif [ "$seen_pending" -eq 1 ]; then
+              echo "gate approved, guard standing down"
+              exit 0
+            fi
+            sleep 60
+          done
+
+          if [ "$seen_pending" -eq 0 ]; then
+            echo "gate never requested approval; nothing to guard"
+            exit 0
+          fi
+
+          echo "gate not approved within 120 minutes, cancelling run"
+          curl -sS -X POST             "https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage"             -d chat_id="${TELEGRAM_CHAT_ID}"             -d text="Night skipped: nightly run was never approved. See: ${RUN_URL}"             >/dev/null || true
+          gh api -X POST "repos/${{ github.repository }}/actions/runs/${{ github.run_id }}/cancel"
 
   run:
     needs: gate
