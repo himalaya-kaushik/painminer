@@ -47,7 +47,7 @@ class Config:
     # model locally (no torch/sentence-transformers). embed_model is the model
     # id LM Studio reports (check `lms ps` or GET /v1/models), not a HF repo
     # path. Thresholds below are starting points to tune.
-    embed_model: str = "bge-small"
+    embed_model: str = "text-embedding-bge-small-en-v1.5"
     embed_batch_size: int = 64
     cluster_merge_threshold: float = 0.90    # >= -> auto-merge
     cluster_tiebreak_low: float = 0.75       # [low, merge) -> LLM tiebreak; below -> new

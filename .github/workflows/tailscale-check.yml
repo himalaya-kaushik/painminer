@@ -45,7 +45,7 @@ jobs:
           set -euo pipefail
           curl -sS -m 300 http://llm-host:1234/v1/chat/completions \
             -H 'Content-Type: application/json' \
-            -d '{"model":"qwen-extract","messages":[{"role":"user","content":"Reply with exactly this JSON and nothing else: {\"ok\":true}"}],"temperature":0,"reasoning_effort":"none"}' \
+            -d '{"model":"qwen/qwen3.6-35b-a3b","messages":[{"role":"user","content":"Reply with exactly this JSON and nothing else: {\"ok\":true}"}],"temperature":0,"reasoning_effort":"none"}' \
             -o /tmp/chat.json
           python3 - <<'PY'
           import json
@@ -63,7 +63,7 @@ jobs:
           set -euo pipefail
           curl -sS -m 60 http://llm-host:1234/v1/embeddings \
             -H 'Content-Type: application/json' \
-            -d '{"model":"bge-small","input":"hello world"}' \
+            -d '{"model":"text-embedding-bge-small-en-v1.5","input":"hello world"}' \
             -o /tmp/emb.json
           python3 - <<'PY'
           import json

@@ -26,7 +26,7 @@ LLM_MODEL=<extraction-model-id>
 ```
 
 `LLM_BASE_URL` must point to an OpenAI-compatible endpoint (LM Studio, vLLM, etc.) that serves the
-model named by `LLM_MODEL`. Embeddings use the same endpoint; the model id defaults to `bge-small`
+model named by `LLM_MODEL`. Embeddings use the same endpoint; the model id defaults to `text-embedding-bge-small-en-v1.5`
 and can be overridden with `EMBED_MODEL`. See `painminer/config.py` for the full list of optional
 overrides (timeouts, run caps, clustering thresholds, digest limits, etc.) and their defaults.
 
