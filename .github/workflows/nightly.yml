@@ -10,6 +10,15 @@ on:
 permissions:
   contents: read
 
+# Model ids, in one place. These are the real LM Studio ids, not aliases: the
+# old `qwen-extract` / `bge-small` aliases only existed while a model was held
+# open by `lms load --identifier`, and vanished when that startup script was
+# deleted. LM Studio has justInTimeModelLoading on, so it loads these on demand.
+# Preflight and the pipeline read the SAME values - do not duplicate them.
+env:
+  LLM_MODEL:   qwen/qwen3.6-35b-a3b
+  EMBED_MODEL: text-embedding-bge-small-en-v1.5
+
 concurrency:
   group: nightly
   cancel-in-progress: false
@@ -91,9 +100,19 @@ jobs:
             echo "::error::llm-host unreachable. Machine asleep, LM Studio down, or VPN on."
             exit 1
           fi
-          for m in qwen-extract bge-small; do
-            grep -q "\"$m\"" /tmp/models.json || { echo "::error::model $m not loaded"; exit 1; }
+          # Check both models before failing, and print what LM Studio actually
+          # serves. A bare "not loaded" left us guessing on 2026-09-22.
+          missing=0
+          for m in "$LLM_MODEL" "$EMBED_MODEL"; do
+            # -F is required: these ids contain / and . which grep would
+            # otherwise read as regex.
+            grep -Fq "\"$m\"" /tmp/models.json || { echo "::error::model $m not available"; missing=1; }
           done
+          if [ "$missing" -ne 0 ]; then
+            echo "LM Studio currently reports:"
+            python3 -c "import json,sys; d=json.load(open('/tmp/models.json')); print('\n'.join('  - '+m['id'] for m in d.get('data',[])))" || cat /tmp/models.json
+            exit 1
+          fi
           echo "preflight OK"
 
       - name: Install dependencies
@@ -109,8 +128,6 @@ jobs:
           TELEGRAM_TOKEN:       ${{ secrets.TELEGRAM_TOKEN }}
           TELEGRAM_CHAT_ID:     ${{ secrets.TELEGRAM_CHAT_ID }}
           LLM_BASE_URL:         http://llm-host:1234/v1
-          LLM_MODEL:            qwen-extract
-          EMBED_MODEL:          bge-small
         run: python -m painminer.tools.run_pipeline 2>&1 | tee /tmp/pipeline-output.log
 
       - name: Upload digest
