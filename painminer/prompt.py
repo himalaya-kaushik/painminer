@@ -32,22 +32,34 @@ from IIT Kanpur. He works on LLMs, agents, reinforcement learning, and
 retrieval systems, and has shipped agentic RAG in production. He thinks
 seriously about system architecture and distributed systems.
 
+He reads as a tech entrepreneur and researcher, not only as an ML engineer.
 He intends to start his own company within two to three years and is
 actively looking for what to build. He has no company, no funding, and no
-particular domain allegiance — he is looking for where the gaps are.
+particular domain allegiance — he is looking for where the gaps are,
+anywhere in technology.
 
-What he wants to know about:
-- Research results that change what is possible, especially in LLMs, RL,
-  agents, and training efficiency
-- Where the field is moving: what is getting funded, what domains are
-  suddenly crowded, what techniques are spreading
-- Genuinely new tools and open-source releases in ML and infrastructure
-- Problems people hit repeatedly that nothing currently solves
+AI and machine learning carry the most weight, but the whole of technology
+is in scope. What he wants to know about:
+- Research results that change what is possible — first in LLMs, RL,
+  agents, and training efficiency, but also in systems, security, hardware,
+  and the rest of computing
+- Where technology and its money are moving: what is getting funded, which
+  markets are opening or suddenly crowded, which techniques and platforms
+  are spreading, and company, platform, or policy moves that reshape an
+  industry
+- Genuinely new tools, infrastructure, and open-source releases — in ML,
+  and equally in developer tools, databases, cloud, security, and hardware
+- Problems people or businesses hit repeatedly that nothing currently
+  solves, in any domain
+- Concrete lessons on building a company — product, pricing, distribution,
+  go-to-market — from founders who show real numbers
 
 What he does not want:
 - Configuration options in consumer software
 - Framework and language opinion threads
-- Generic startup advice
+- Generic startup advice with no numbers or specifics behind it
+- Consumer gadget, entertainment, or celebrity-tech news with no technical
+  or market substance
 - Anything he would have already known"""
 
 
@@ -68,8 +80,9 @@ but a false negative is the only thing that loses a real signal.
 
 Say true only when the text plausibly contains one of the things he wants:
 a research result that changes what is possible, a real signal about where
-the field or its money is moving, a genuinely new ML/infrastructure tool or
-release, or a problem people hit repeatedly that nothing solves.
+technology or its money is moving, a genuinely new tool or release (ML,
+infrastructure, developer tools, security, hardware), a concrete lesson on
+building a company, or a problem people hit repeatedly that nothing solves.
 
 Return a JSON object: {"worth_reading": true|false}. Nothing else — no
 explanation, no summary. This pass runs on every item and decode is the
@@ -115,11 +128,11 @@ Things that may be worth surfacing:
   or Show HN that only describes what it is — no stated problem and no strong
   engagement — is NOT a finding: return nothing for it.
 - research: a paper, result, or research direction in machine learning,
-  systems engineering, or startups worth knowing about. Must be directly
+  computing and systems engineering, or startups worth knowing about. Must be directly
   relevant to one of those; reject analogical or adjacent relevance.
 - pattern: an architectural or engineering pattern worth internalising
-- read: an article directly relevant to machine learning, systems
-  engineering, or startups that is genuinely worth this person's time.
+- read: an article directly relevant to machine learning, computing and
+  systems engineering, or startups that is genuinely worth this person's time.
   Reject analogical relevance.
 - signal: something shifting — funding, hiring, deprecation, a platform
   changing its terms
