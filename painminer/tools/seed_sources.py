@@ -299,9 +299,40 @@ YC_LAUNCHES = {
     },
 }
 
+# Daily newsletters from the Gmail-fed Obsidian vault (himalaya-vault, private).
+# The nightly workflow sparse-checks-out its Newsletters/ folder with a
+# read-only deploy key and exports VAULT_NEWSLETTERS_DIR; if that step fails
+# this source fails alone and the run carries on. Each email is split into
+# stories / longform chunks (adapters/newsletter_layouts.py). adapter='bulk'
+# satisfies the schema CHECK; adapter_impl selects the vault adapter.
+NEWSLETTERS = {
+    "name": "newsletters",
+    "adapter": "bulk",
+    "cursor_field": "date",
+    "enabled": True,
+    "config_json": {
+        "adapter_impl": "newsletters",
+        "vault_dir_env": "VAULT_NEWSLETTERS_DIR",
+        # No per-newsletter rules: every sender in the vault is read, and
+        # subscriptions can come and go with no change here. Paywall
+        # cut-offs and link/footer noise are handled generically by the
+        # layouts; triage filters what is off-profile. `exclude_senders`
+        # (sender slugs, the filename part before "--") exists as an escape
+        # hatch only.
+        "exclude_senders": [],
+        # The vault lands a day's mail the following day; 72h spans that lag
+        # plus one missed vault run. Re-reads are free (upsert, ignore dupes).
+        "overlap_hours": 72,
+        "max_age_hours": 72,
+        "chunk_max_chars": 4000,
+        "chunk_min_chars": 400,
+    },
+}
+
 SOURCES = [
     HACKER_NEWS, GITHUB, LOBSTERS, STACKOVERFLOW,
     ARXIV, PRODUCT_HUNT, HF_PAPERS, HF_DATASETS, HF_MODELS, YC_LAUNCHES,
+    NEWSLETTERS,
 ]
 
 

@@ -19,3 +19,6 @@ digests/
 
 # OS
 .DS_Store
+
+# newsletter vault checkout (nightly workflow / local runs)
+vault/

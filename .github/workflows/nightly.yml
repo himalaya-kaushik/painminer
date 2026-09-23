@@ -80,6 +80,21 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
+      # The `newsletters` source reads the private vault's Newsletters/ folder
+      # (read-only deploy key, sparse, shallow). Optional by design: if this
+      # fails, VAULT_NEWSLETTERS_DIR points at nothing, that one source records
+      # a fetch error, and every other source runs as normal.
+      - name: Check out newsletter vault (optional source)
+        continue-on-error: true
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: himalaya-kaushik/himalaya-vault
+          ssh-key: ${{ secrets.VAULT_DEPLOY_KEY }}
+          path: vault
+          sparse-checkout: Newsletters
+          fetch-depth: 1
+          persist-credentials: false
+
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: '3.12'
@@ -128,6 +143,7 @@ jobs:
           TELEGRAM_TOKEN:       ${{ secrets.TELEGRAM_TOKEN }}
           TELEGRAM_CHAT_ID:     ${{ secrets.TELEGRAM_CHAT_ID }}
           LLM_BASE_URL:         http://llm-host:1234/v1
+          VAULT_NEWSLETTERS_DIR: ${{ github.workspace }}/vault/Newsletters
         run: python -m painminer.tools.run_pipeline 2>&1 | tee /tmp/pipeline-output.log
 
       - name: Upload digest
