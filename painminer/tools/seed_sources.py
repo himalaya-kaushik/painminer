@@ -320,10 +320,11 @@ NEWSLETTERS = {
         # (sender slugs, the filename part before "--") exists as an escape
         # hatch only.
         "exclude_senders": [],
-        # The vault lands a day's mail the following day; 72h spans that lag
-        # plus one missed vault run. Re-reads are free (upsert, ignore dupes).
-        "overlap_hours": 72,
-        "max_age_hours": 72,
+        # Today's vault folder plus the 2 before it: the vault files mail the
+        # day after it arrives, and a missed vault day is caught up next run.
+        # Folders already processed re-insert nothing (deterministic ids), so
+        # each night adds only what the vault newly wrote.
+        "lookback_days": 2,
         "chunk_max_chars": 4000,
         "chunk_min_chars": 400,
     },

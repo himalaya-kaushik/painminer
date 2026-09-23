@@ -17,11 +17,15 @@ normalized title, so the repeats collapse to one item — within a run here, and
 across runs via the (source, source_id) unique constraint. It is read once.
 Longform chunks are keyed by message id + chunk number.
 
-Window: [since_ts - overlap, until_ts), floored at now - max_age. The vault
-lands a day's mail the next day, so the overlap spans that lag (re-reads are
-free: fetch upserts with ignore_duplicates). The floor bounds a first run
-(fetch's default is a 30-day backfill) and means a vault that was down for
-days is skipped rather than dumped into one night.
+Window, by vault day folder: today's folder and the `lookback_days` before
+it (UTC). The vault's daily fetch files each email under the day it arrived,
+so yesterday's mail lands the next day; re-reading a folder already done is
+free (fetch upserts with ignore_duplicates, and ids are deterministic), so
+each night effectively adds only what the vault newly wrote. The watermark
+(since_ts) is deliberately not used: it would turn a first run into fetch's
+default 30-day backfill, and a vault that was down for longer than the
+lookback is skipped rather than dumped into one night. until_ts (tests,
+bounded chunks) is still honoured on the email's date.
 
 Failure isolation: a missing/unset vault dir raises, so scan.py records a
 per-source failure and the run carries on, exactly like any other source. A
@@ -33,8 +37,7 @@ Relevant `config_json` keys:
                              (default "VAULT_NEWSLETTERS_DIR")
     exclude_senders   list   optional escape hatch: sender slugs (the filename
                              part before "--") to skip (default none)
-    overlap_hours     float  re-read window below since_ts (default 72)
-    max_age_hours     float  never read mail older than this (default 72)
+    lookback_days     int    day folders read before today's (default 2)
     chunk_max_chars   int    longform chunk ceiling (default 4000)
     chunk_min_chars   int    longform runt threshold (default 400)
 """
@@ -118,8 +121,7 @@ class NewslettersAdapter(Adapter):
         cfg = self.config
         self.vault_dir_env: str = cfg.get("vault_dir_env", "VAULT_NEWSLETTERS_DIR")
         self.exclude_senders: set[str] = {s.lower() for s in cfg.get("exclude_senders") or []}
-        self.overlap_seconds: int = int(float(cfg.get("overlap_hours", 72)) * 3600)
-        self.max_age_seconds: int = int(float(cfg.get("max_age_hours", 72)) * 3600)
+        self.lookback_days: int = int(cfg.get("lookback_days", 2))
         self.chunk_max_chars: int = int(cfg.get("chunk_max_chars", 4000))
         self.chunk_min_chars: int = int(cfg.get("chunk_min_chars", 400))
         self.now: float | None = None        # tests pin the clock here
@@ -135,15 +137,12 @@ class NewslettersAdapter(Adapter):
             raise RuntimeError(f"newsletter vault dir {root} does not exist")
         return root
 
-    def _files(self, root: Path, lower: int) -> list[Path]:
-        """Emails in day folders that can hold mail at or after `lower` (one
-        day of slack for timezone edges; the frontmatter date is the real
-        filter). Only the window's folders are listed, so cost stays flat as
-        the vault grows."""
-        first_day = (datetime.fromtimestamp(lower, tz=timezone.utc) - timedelta(days=1)).date()
+    def _files(self, root: Path, first_day: str) -> list[Path]:
+        """Emails in day folders from `first_day` on. Only those folders are
+        listed, so cost stays flat as the vault grows."""
         files: list[Path] = []
         for d in sorted(root.iterdir()):
-            if d.is_dir() and _DATE_DIR.match(d.name) and d.name >= first_day.isoformat():
+            if d.is_dir() and _DATE_DIR.match(d.name) and d.name >= first_day:
                 files.extend(sorted(p for p in d.iterdir()
                                     if p.suffix == ".md" and not self._excluded(p)))
         return files
@@ -168,11 +167,11 @@ class NewslettersAdapter(Adapter):
             metadata={"publication": publication, "subject": subject},
         )
 
-    def _email_items(self, path: Path, lower: int, until_ts: int | None,
+    def _email_items(self, path: Path, until_ts: int | None,
                      seen: set[str]) -> list[FetchedItem]:
         fm, body = parse_frontmatter(path.read_text(encoding="utf-8"))
         ts = parse_date(fm.get("date"))
-        if ts is None or ts < lower or (until_ts is not None and ts >= until_ts):
+        if ts is None or (until_ts is not None and ts >= until_ts):
             return []
 
         publication = publication_name(fm.get("sender", ""), path.name.split("--", 1)[0])
@@ -215,12 +214,13 @@ class NewslettersAdapter(Adapter):
     ) -> Iterator[list[FetchedItem]]:
         """One page per email, so memory stays bounded by one email."""
         root = self._root()
-        now = int(self.now if self.now is not None else time.time())
-        lower = max(since_ts - self.overlap_seconds, now - self.max_age_seconds)
+        now = self.now if self.now is not None else time.time()
+        today = datetime.fromtimestamp(now, tz=timezone.utc).date()
+        first_day = (today - timedelta(days=self.lookback_days)).isoformat()
         seen: set[str] = set()
-        for path in self._files(root, lower):
+        for path in self._files(root, first_day):
             try:
-                page = self._email_items(path, lower, until_ts, seen)
+                page = self._email_items(path, until_ts, seen)
             except Exception:
                 continue           # one bad file never kills the source
             if page:

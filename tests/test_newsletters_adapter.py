@@ -4,8 +4,10 @@ fake vault built with tempfile.TemporaryDirectory(); no network, no database.
 Covers:
   * parse_frontmatter: basic, wrapped subject, escaped quotes, no frontmatter.
   * parse_date / publication_name helpers.
-  * windowing: since_ts/overlap/max_age lower bound, until_ts exclusive, old
-    day folders never listed.
+  * windowing: day-folder window by lookback_days (today and lookback_days
+    before, including future-dated folders), since_ts ignored entirely,
+    until_ts exclusive on email date, old day folders never listed, rerun
+    idempotence.
   * exclude_senders.
   * cross-newsletter same-day dedupe by normalized story title; different day
     stays separate.
@@ -67,9 +69,7 @@ def _write(root, day, fname, *, sender, subject, date_iso, message_id, body=LONG
 
 
 def _adapter(root, config=None, now=1790100000):
-    cfg = {"max_age_hours": 1_000_000}
-    if config:
-        cfg.update(config)
+    cfg = dict(config or {})
     a = NewslettersAdapter({"name": "newsletters", "config_json": cfg}, None)
     a.now = now
     return a
@@ -155,55 +155,109 @@ def test_publication_name_variants():
 
 def test_windowing_lower_bound_and_until_exclusive():
     with _EnvVault() as root:
-        since_ts = 1789862400  # 2026-09-20T00:00:00Z
-        until_ts = 1790000000
+        now = datetime(2026, 9, 23, 12, 0, 0, tzinfo=timezone.utc).timestamp()
+        until_ts = 1790000000  # 2026-09-21T14:13:20Z
         until_iso = datetime.fromtimestamp(until_ts, tz=timezone.utc).isoformat().replace("+00:00", "Z")
         before_until_iso = datetime.fromtimestamp(until_ts - 1, tz=timezone.utc).isoformat().replace("+00:00", "Z")
 
-        _write(root, "2026-09-17", "a--in-window.md", sender="A <a@x.com>", subject="In window",
-               date_iso="2026-09-17T00:00:00Z", message_id="<w1@x.com>")
-        _write(root, "2026-09-16", "a--too-old.md", sender="A <a@x.com>", subject="Too old",
-               date_iso="2026-09-16T23:59:59Z", message_id="<w2@x.com>")
-        _write(root, "2026-09-21", "a--at-until.md", sender="A <a@x.com>", subject="At until",
-               date_iso=until_iso, message_id="<w3@x.com>")
         _write(root, "2026-09-21", "a--before-until.md", sender="A <a@x.com>", subject="Before until",
-               date_iso=before_until_iso, message_id="<w4@x.com>")
+               date_iso=before_until_iso, message_id="<w1@x.com>")
+        _write(root, "2026-09-21", "a--at-until.md", sender="A <a@x.com>", subject="At until",
+               date_iso=until_iso, message_id="<w2@x.com>")
+        _write(root, "2026-09-20", "a--too-old-folder.md", sender="A <a@x.com>", subject="Too old folder",
+               date_iso="2026-09-20T23:59:59Z", message_id="<w3@x.com>")
 
-        adapter = _adapter(root, {"overlap_hours": 72})
-        subjects = {it.metadata["subject"] for it in _collect(adapter, since_ts, until_ts)}
-        assert subjects == {"In window", "Before until"}
+        # lookback_days=2 on today=2026-09-23 -> first_day=2026-09-21, so the
+        # 09-20 folder is out on folder grounds alone, and of the two 09-21
+        # emails only the one strictly before until_ts survives.
+        adapter = _adapter(root, {"lookback_days": 2}, now=now)
+        subjects = {it.metadata["subject"] for it in _collect(adapter, until_ts=until_ts)}
+        assert subjects == {"Before until"}
 
 
-def test_windowing_max_age_floor_beats_wide_overlap():
+def test_windowing_lookback_days_reads_expected_folders():
     with _EnvVault() as root:
-        _write(root, "2026-09-10", "a--old.md", sender="A <a@x.com>", subject="Old",
-               date_iso="2026-09-10T00:00:00Z", message_id="<m@x.com>")
-        # overlap is huge (would include the email from since_ts=0) but
-        # max_age_hours floors the window much closer to "now"
-        adapter = NewslettersAdapter(
-            {"name": "n", "config_json": {"overlap_hours": 1_000_000, "max_age_hours": 24}}, None)
-        adapter.now = 1790100000
-        assert _collect(adapter, since_ts=0) == []
+        now = datetime(2026, 9, 23, 12, 0, 0, tzinfo=timezone.utc).timestamp()
+        for day, subject in [
+            ("2026-09-20", "Too old"),
+            ("2026-09-21", "Day 21"),
+            ("2026-09-22", "Day 22"),
+            ("2026-09-23", "Day 23 (today)"),
+            ("2026-09-24", "Day 24 (future)"),
+        ]:
+            _write(root, day, "a--issue.md", sender="A <a@x.com>", subject=subject,
+                   date_iso=f"{day}T00:00:00Z", message_id=f"<{day}@x.com>")
+
+        adapter = _adapter(root, {"lookback_days": 2}, now=now)
+        subjects = {it.metadata["subject"] for it in _collect(adapter)}
+        # today, lookback_days before it, and even future-dated folders are
+        # read; only the folder before the window is excluded
+        assert subjects == {"Day 21", "Day 22", "Day 23 (today)", "Day 24 (future)"}
+
+
+def test_windowing_since_ts_has_no_effect():
+    with _EnvVault() as root:
+        now = datetime(2026, 9, 23, 12, 0, 0, tzinfo=timezone.utc).timestamp()
+        _write(root, "2026-09-22", "a--issue.md", sender="A <a@x.com>", subject="Issue",
+               date_iso="2026-09-22T00:00:00Z", message_id="<w1@x.com>")
+
+        adapter_zero = _adapter(root, {"lookback_days": 2}, now=now)
+        ids_zero = [it.source_id for it in _collect(adapter_zero, since_ts=0)]
+        adapter_now = _adapter(root, {"lookback_days": 2}, now=now)
+        ids_now = [it.source_id for it in _collect(adapter_now, since_ts=int(now))]
+
+        assert ids_zero == ids_now
+        assert len(ids_zero) == 1
+
+
+def test_windowing_lookback_days_zero_reads_only_today():
+    with _EnvVault() as root:
+        now = datetime(2026, 9, 23, 12, 0, 0, tzinfo=timezone.utc).timestamp()
+        _write(root, "2026-09-22", "a--yesterday.md", sender="A <a@x.com>", subject="Yesterday",
+               date_iso="2026-09-22T00:00:00Z", message_id="<w1@x.com>")
+        _write(root, "2026-09-23", "a--today.md", sender="A <a@x.com>", subject="Today",
+               date_iso="2026-09-23T00:00:00Z", message_id="<w2@x.com>")
+
+        adapter = _adapter(root, {"lookback_days": 0}, now=now)
+        subjects = {it.metadata["subject"] for it in _collect(adapter)}
+        assert subjects == {"Today"}
 
 
 def test_windowing_old_day_folders_not_listed_and_no_error():
     with _EnvVault() as root:
-        since_ts = 1789862400
-        _write(root, "2026-09-17", "a--in-window.md", sender="A <a@x.com>", subject="In window",
-               date_iso="2026-09-17T00:00:00Z", message_id="<w1@x.com>")
+        now = datetime(2026, 9, 23, 12, 0, 0, tzinfo=timezone.utc).timestamp()
+        _write(root, "2026-09-22", "a--in-window.md", sender="A <a@x.com>", subject="In window",
+               date_iso="2026-09-22T00:00:00Z", message_id="<w1@x.com>")
         # a garbage, unparseable file tucked into a folder well before the
         # window: the folder must never even be listed, and nothing must raise
         garbage_dir = Path(root) / "2020-01-01"
         garbage_dir.mkdir(parents=True)
         (garbage_dir / "garbage--old.md").write_text("not frontmatter\ngarbage nonsense\n", encoding="utf-8")
 
-        adapter = _adapter(root, {"overlap_hours": 72})
-        items = _collect(adapter, since_ts)
+        adapter = _adapter(root, {"lookback_days": 2}, now=now)
+        items = _collect(adapter)
         assert [it.metadata["subject"] for it in items] == ["In window"]
 
-        lower = since_ts - 72 * 3600
-        listed = adapter._files(Path(root), lower)
+        listed = adapter._files(Path(root), "2026-09-21")
         assert all("2020-01-01" not in str(p) for p in listed)
+
+
+def test_windowing_rerun_yields_identical_source_ids():
+    with _EnvVault() as root:
+        now = datetime(2026, 9, 23, 12, 0, 0, tzinfo=timezone.utc).timestamp()
+        _write(root, "2026-09-22", "a--issue.md", sender="A <a@x.com>", subject="Issue",
+               date_iso="2026-09-22T00:00:00Z", message_id="<w1@x.com>",
+               body=_digest_body("Some Story Title", "Blurb.", "5 minute read"))
+
+        adapter1 = _adapter(root, {"lookback_days": 2}, now=now)
+        ids1 = [it.source_id for it in _collect(adapter1)]
+        adapter2 = _adapter(root, {"lookback_days": 2}, now=now)
+        ids2 = [it.source_id for it in _collect(adapter2)]
+
+        # re-reading an already-processed folder produces the same
+        # deterministic source_ids, so a rerun inserts nothing new
+        assert ids1 == ids2
+        assert ids1
 
 
 # --- exclude_senders ---------------------------------------------------
