@@ -85,6 +85,10 @@ class Config:
     # ~135k-char prompt that risks both the timeout and the context window.
     # 250 is still far more material than a 10-item digest can use.
     synthesis_max_findings: int = 250
+    # When the cap above binds, no one source may fill more than this share
+    # of it before the others are seen (unused slots are refilled). Measured
+    # Sep 2026: arXiv alone was 40-50% of a night's findings.
+    synthesis_max_source_share: float = 0.35
     digests_dir: str = "digests"       # where YYYY-MM-DD.md is written (§4)
     # Hard caps on the digest, enforced deterministically after synthesis so
     # they don't depend on the model obeying the prompt.
@@ -161,6 +165,8 @@ def load_config() -> Config:
         optional["synthesis_shortlist"] = int(os.environ["SYNTHESIS_SHORTLIST"])
     if os.getenv("SYNTHESIS_MAX_FINDINGS"):
         optional["synthesis_max_findings"] = int(os.environ["SYNTHESIS_MAX_FINDINGS"])
+    if os.getenv("SYNTHESIS_MAX_SOURCE_SHARE"):
+        optional["synthesis_max_source_share"] = float(os.environ["SYNTHESIS_MAX_SOURCE_SHARE"])
     if os.getenv("DIGESTS_DIR"):
         optional["digests_dir"] = os.environ["DIGESTS_DIR"].strip()
     if os.getenv("DIGEST_SOMEONE_BUILT_CAP"):

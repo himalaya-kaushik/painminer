@@ -32,7 +32,7 @@ class SynthesisResult:
     night_summary: str = ""
     # section name -> list of {headline, body, finding_ids}
     sections: dict[str, list[dict]] = field(default_factory=dict)
-    # finding id -> {url, cluster_id, source, kind, statement}
+    # finding id -> {url, cluster_id, source, publication, kind, statement}
     findings_index: dict[int, dict] = field(default_factory=dict)
     n_findings: int = 0
     raw: str = ""
@@ -75,7 +75,7 @@ def gather_tonight(db: DB, since_iso: str) -> tuple[list[dict], dict[int, dict]]
     item_meta: dict[int, dict] = {}
     for i in range(0, len(item_ids), 100):
         chunk = item_ids[i:i + 100]
-        for it in db.table("items").select("id, url, source").in_("id", chunk).execute().data:
+        for it in db.table("items").select("id, url, source, metadata").in_("id", chunk).execute().data:
             item_meta[it["id"]] = it
 
     # Resolve cluster recurrence in chunks.
@@ -102,6 +102,9 @@ def gather_tonight(db: DB, since_iso: str) -> tuple[list[dict], dict[int, dict]]
             "url": it.get("url"),
             "cluster_id": f.get("cluster_id"),
             "source": it.get("source"),
+            # Newsletter items carry no url; their publication is the
+            # attribution the digest shows instead ("via TLDR AI").
+            "publication": (it.get("metadata") or {}).get("publication"),
             "kind": f.get("kind"),
             "statement": f.get("statement"),
         }
@@ -214,7 +217,9 @@ def apply_caps(
     return result
 
 
-def select_for_prompt(findings: list[dict], max_findings: int) -> list[dict]:
+def select_for_prompt(
+    findings: list[dict], max_findings: int, max_source_share: float = 1.0
+) -> list[dict]:
     """The subset of tonight's findings that goes into the pass-3 prompt.
 
     Highest confidence first, then newest, so a hard cap drops the weakest
@@ -222,6 +227,14 @@ def select_for_prompt(findings: list[dict], max_findings: int) -> list[dict]:
     hundreds of findings; feeding all of them risks both the synthesis
     timeout and the model's context window, and a capped digest can only use
     a handful anyway. Returns them in id order so the block reads stably.
+
+    Source balance: when the cap binds, no single source may take more than
+    `max_source_share` of it on the first pass, so one high-volume source
+    (arXiv, HN, newsletters) cannot crowd every other source out of the
+    prompt. Each source keeps its own strongest findings. Slots the small
+    sources don't use are then refilled from the best remaining findings of
+    any source, so the prompt is never smaller than it would have been. Under
+    the cap nothing is dropped and this does nothing.
     """
     if max_findings <= 0 or len(findings) <= max_findings:
         return findings
@@ -229,8 +242,20 @@ def select_for_prompt(findings: list[dict], max_findings: int) -> list[dict]:
         findings,
         key=lambda f: (f.get("confidence") or 0.0, f.get("created_at") or ""),
         reverse=True,
-    )[:max_findings]
-    return sorted(ranked, key=lambda f: f["id"])
+    )
+    per_source = max(1, int(max_findings * max_source_share))
+    taken: list[dict] = []
+    left: list[dict] = []
+    counts: dict[str | None, int] = {}
+    for f in ranked:
+        src = f.get("_source")
+        if len(taken) < max_findings and counts.get(src, 0) < per_source:
+            taken.append(f)
+            counts[src] = counts.get(src, 0) + 1
+        else:
+            left.append(f)
+    taken.extend(left[: max_findings - len(taken)])   # refill unused slots
+    return sorted(taken, key=lambda f: f["id"])
 
 
 def synthesize_night(
@@ -245,7 +270,8 @@ def synthesize_night(
     findings, index = gather_tonight(db, since)
     # Index keeps every finding (so a cited id still resolves its url/cluster
     # even if it was cut from the prompt); only the prompt block is capped.
-    selected = select_for_prompt(findings, config.synthesis_max_findings)
+    selected = select_for_prompt(findings, config.synthesis_max_findings,
+                                 config.synthesis_max_source_share)
     messages = build_synthesis_messages(
         findings_block(selected), shortlist_block(db, config)
     )

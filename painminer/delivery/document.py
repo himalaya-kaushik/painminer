@@ -59,6 +59,18 @@ def _links(item: dict, index: dict[int, dict]) -> list[str]:
     return links
 
 
+def _via(item: dict, index: dict[int, dict]) -> list[str]:
+    """Publications behind the item's url-less findings (newsletter items),
+    so an item with no link still says where it came from."""
+    seen: list[str] = []
+    for fid in item.get("finding_ids", []):
+        meta = index.get(fid)
+        pub = meta and not meta.get("url") and meta.get("publication")
+        if pub and pub not in seen:
+            seen.append(pub)
+    return seen
+
+
 def _first_cluster_id(item: dict, index: dict[int, dict]) -> int | None:
     for fid in item.get("finding_ids", []):
         meta = index.get(fid)
@@ -88,11 +100,15 @@ def render_markdown(result: SynthesisResult, day: date_cls | None = None) -> str
             lines.append(f"### {n}. {item['headline']}")
             body = item.get("body", "").strip()
             links = _links(item, result.findings_index)
+            via = _via(item, result.findings_index)
             if body:
                 lines.append(body)
-            if links:
+            refs = [f"[source]({u})" for u in links]
+            if via:
+                refs.append("via " + ", ".join(via))
+            if refs:
                 lines.append("")
-                lines.append(" · ".join(f"[source]({u})" for u in links))
+                lines.append(" · ".join(refs))
             lines.append("")
 
     if result.is_empty and not result.night_summary:

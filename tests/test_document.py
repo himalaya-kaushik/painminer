@@ -145,6 +145,119 @@ def test_headlines_cluster_id_and_url_resolution():
     assert hs[0].url == "http://x"
 
 
+def test_render_markdown_newsletter_only_item_shows_via_no_source_link():
+    index = {
+        1: {"url": None, "cluster_id": None, "publication": "TLDR AI"},
+    }
+    result = _result(
+        sections={
+            "patterns": [_item("P1", "b1", [1])],
+            "worth_reading": [],
+            "someone_built": [],
+        },
+        findings_index=index,
+    )
+    md = render_markdown(result, day=datetime.date(2026, 9, 15))
+    assert "via TLDR AI" in md
+    assert "[source]" not in md
+
+
+def test_render_markdown_mixed_item_shows_link_and_via():
+    index = {
+        1: {"url": "https://example.com/a", "cluster_id": None, "publication": None},
+        2: {"url": None, "cluster_id": None, "publication": "AlphaSignal"},
+    }
+    result = _result(
+        sections={
+            "patterns": [_item("P1", "b1", [1, 2])],
+            "worth_reading": [],
+            "someone_built": [],
+        },
+        findings_index=index,
+    )
+    md = render_markdown(result, day=datetime.date(2026, 9, 15))
+    assert "[source](https://example.com/a) · via AlphaSignal" in md
+
+
+def test_render_markdown_same_publication_listed_once():
+    index = {
+        1: {"url": None, "cluster_id": None, "publication": "TLDR AI"},
+        2: {"url": None, "cluster_id": None, "publication": "TLDR AI"},
+    }
+    result = _result(
+        sections={
+            "patterns": [_item("P1", "b1", [1, 2])],
+            "worth_reading": [],
+            "someone_built": [],
+        },
+        findings_index=index,
+    )
+    md = render_markdown(result, day=datetime.date(2026, 9, 15))
+    assert md.count("TLDR AI") == 1
+
+
+def test_render_markdown_finding_with_url_and_publication_shows_only_link():
+    # A finding that somehow carries both a url and a publication must not
+    # also produce a "via" — the link alone stands in for it.
+    index = {
+        1: {"url": "https://example.com/a", "cluster_id": None, "publication": "AlphaSignal"},
+    }
+    result = _result(
+        sections={
+            "patterns": [_item("P1", "b1", [1])],
+            "worth_reading": [],
+            "someone_built": [],
+        },
+        findings_index=index,
+    )
+    md = render_markdown(result, day=datetime.date(2026, 9, 15))
+    assert "[source](https://example.com/a)" in md
+    assert "via" not in md
+
+
+def test_render_markdown_item_with_neither_url_nor_publication_has_no_refs_line():
+    index = {
+        1: {"url": None, "cluster_id": None, "publication": None},
+    }
+    result = _result(
+        sections={
+            "patterns": [_item("P1", "b1", [1])],
+            "worth_reading": [],
+            "someone_built": [],
+        },
+        findings_index=index,
+    )
+    md = render_markdown(result, day=datetime.date(2026, 9, 15))
+    assert "via" not in md
+    assert "[source]" not in md
+    assert "None" not in md
+    # no stray blank-line pair before the trailing section blank line
+    lines = md.split("\n")
+    item_idx = lines.index("### 1. P1")
+    assert lines[item_idx + 1] == "b1"
+    assert lines[item_idx + 2] == ""
+    # next non-empty content is the next heading or end of document, not a
+    # dangling refs line
+    assert not any(l.strip() == "via" for l in lines)
+
+
+def test_headlines_url_stays_none_for_newsletter_only_item():
+    index = {
+        1: {"url": None, "cluster_id": None, "publication": "TLDR AI"},
+    }
+    result = _result(
+        sections={
+            "patterns": [_item("P1", "b1", [1])],
+            "worth_reading": [],
+            "someone_built": [],
+        },
+        findings_index=index,
+    )
+    hs = headlines(result, limit=5)
+    assert len(hs) == 1
+    assert hs[0].url is None
+
+
 def test_write_digest_roundtrip():
     tmp_dir = Path(tempfile.mkdtemp(prefix="painminer_test_digest_"))
     try:

@@ -50,6 +50,17 @@ def test_optional_overrides():
     assert cfg.max_run_minutes == 15 and cfg.llm_timeout_seconds == 45.0
 
 
+def test_default_synthesis_max_source_share():
+    cfg = _with_env(dict(_REQUIRED), config.load_config)
+    assert cfg.synthesis_max_source_share == 0.35
+
+
+def test_synthesis_max_source_share_env_override():
+    env = dict(_REQUIRED, SYNTHESIS_MAX_SOURCE_SHARE="0.5")
+    cfg = _with_env(env, config.load_config)
+    assert cfg.synthesis_max_source_share == 0.5
+
+
 def test_missing_key_lists_all_missing():
     env = {"SUPABASE_URL": "u"}  # everything else missing
     try:

@@ -164,3 +164,79 @@ def test_select_for_prompt_handles_missing_confidence():
     findings = [{"id": 1, "statement": "a"}, _f(2, 0.9)]
     out = select_for_prompt(findings, 1)
     assert [f["id"] for f in out] == [2]   # the one with real confidence wins
+
+
+# --- select_for_prompt source balancing (max_source_share) ------------------
+
+def _fs(i, conf, source, created="2026-09-19T00:00:00+00:00"):
+    return {"id": i, "kind": "pain", "statement": f"s{i}", "confidence": conf,
+            "created_at": created, "_source": source}
+
+
+def test_select_for_prompt_default_share_matches_old_top_n_behaviour():
+    from painminer.pipeline.synthesize import select_for_prompt
+    findings = [
+        _fs(1, 0.10, "arxiv"),
+        _fs(2, 0.95, "arxiv"),
+        _fs(3, 0.50, "arxiv"),
+        _fs(4, 0.90, "arxiv"),
+        _fs(5, 0.99, "github"),
+        _fs(6, 0.20, "github"),
+    ]
+    # default max_source_share=1.0 -> no source cap, plain top-3 by confidence
+    out = select_for_prompt(findings, 3)
+    assert [f["id"] for f in out] == [2, 4, 5]
+
+
+def test_select_for_prompt_under_cap_unchanged_regardless_of_share():
+    from painminer.pipeline.synthesize import select_for_prompt
+    findings = [_fs(1, 0.9, "arxiv"), _fs(2, 0.9, "arxiv"), _fs(3, 0.1, "github")]
+    # len(findings) <= max_findings -> returned as-is, share is irrelevant
+    assert select_for_prompt(findings, 10, max_source_share=0.01) == findings
+    assert select_for_prompt(findings, 3, max_source_share=0.01) == findings
+
+
+def test_select_for_prompt_caps_dominant_source_to_include_smaller_source():
+    from painminer.pipeline.synthesize import select_for_prompt
+    arxiv = [_fs(i, 0.80 + i * 0.001, "arxiv") for i in range(1, 11)]       # 10, high confidence
+    github = [_fs(i, 0.10 + (i - 100) * 0.001, "github") for i in range(101, 106)]  # 5, low confidence
+    out = select_for_prompt(arxiv + github, 6, max_source_share=0.5)
+    sources = [f["_source"] for f in out]
+    assert sources.count("arxiv") == 3
+    assert sources.count("github") == 3
+    assert len(out) == 6
+    assert [f["id"] for f in out] == sorted(f["id"] for f in out)  # id-sorted
+
+
+def test_select_for_prompt_refills_dominant_source_when_others_cant_fill():
+    from painminer.pipeline.synthesize import select_for_prompt
+    arxiv = [_fs(i, 0.80 + i * 0.001, "arxiv") for i in range(1, 11)]  # 10, high confidence
+    github = [_fs(101, 0.05, "github")]                                # 1, low confidence
+    out = select_for_prompt(arxiv + github, 6, max_source_share=0.35)
+    assert len(out) == 6
+    sources = [f["_source"] for f in out]
+    assert "github" in sources   # the small source's finding still makes it in
+    assert sources.count("arxiv") == 5   # backfilled from the best remaining arxiv
+
+
+def test_select_for_prompt_never_exceeds_cap_and_is_id_sorted():
+    from painminer.pipeline.synthesize import select_for_prompt
+    findings = [_fs(i, (i * 37) % 101 / 100.0, f"src{i % 4}") for i in range(50, 0, -1)]
+    out = select_for_prompt(findings, 12, max_source_share=0.3)
+    assert len(out) <= 12
+    assert [f["id"] for f in out] == sorted(f["id"] for f in out)
+
+
+def test_select_for_prompt_missing_source_treated_as_one_bucket():
+    from painminer.pipeline.synthesize import select_for_prompt
+    # Mix findings with no "_source" key at all and findings with an explicit
+    # None source; both must group into the same (None) bucket without KeyError.
+    findings = [
+        {"id": 1, "confidence": 0.9, "created_at": "2026-09-19T00:00:00+00:00"},
+        {"id": 2, "confidence": 0.8, "created_at": "2026-09-19T00:00:00+00:00", "_source": None},
+        {"id": 3, "confidence": 0.7, "created_at": "2026-09-19T00:00:00+00:00"},
+        _fs(4, 0.6, "github"),
+    ]
+    out = select_for_prompt(findings, 2, max_source_share=0.5)
+    assert len(out) == 2
+    assert [f["id"] for f in out] == sorted(f["id"] for f in out)
