@@ -21,8 +21,8 @@ def test_someone_built_cap_at_most_5_present():
     assert "at most 5" in SYNTHESIS_SYSTEM_PROMPT
 
 
-def test_total_cap_at_most_25_present():
-    assert "at most 25" in SYNTHESIS_SYSTEM_PROMPT
+def test_total_cap_at_most_20_present():
+    assert "at most 20" in SYNTHESIS_SYSTEM_PROMPT
 
 
 def test_shipped_section_distinct_from_someone_built():

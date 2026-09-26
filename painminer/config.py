@@ -83,7 +83,7 @@ class Config:
     # Hard cap on how many of tonight's findings go into the pass-3 prompt,
     # highest-confidence first. Without it a 3000-item backlog produces a
     # ~135k-char prompt that risks both the timeout and the context window.
-    # 250 is still far more material than a 25-item digest can use.
+    # 250 is still far more material than a 20-item digest can use.
     synthesis_max_findings: int = 250
     # When the cap above binds, no one source may fill more than this share
     # of it before the others are seen (unused slots are refilled). Measured
@@ -93,7 +93,7 @@ class Config:
     # Hard caps on the digest, enforced deterministically after synthesis so
     # they don't depend on the model obeying the prompt.
     digest_someone_built_cap: int = 5  # max items under "Someone built"
-    digest_total_cap: int = 25         # max items across the whole briefing
+    digest_total_cap: int = 20         # max items across the whole briefing
 
 
 # Maps a Config field to its .env variable name.

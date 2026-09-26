@@ -162,6 +162,10 @@ class JsonApiAdapter(Adapter):
         falls below the window. Subclasses with special windowing (HN, GitHub)
         override this.
         """
+        # Sources dated by original publication (HF daily papers) list items
+        # days after that date; config `overlap_hours` widens the window, and
+        # the (source, source_id) upsert makes re-seen items a no-op.
+        since_ts -= int(float(self.config.get("overlap_hours", 0)) * 3600)
         page = self.page_start
         for fetched_pages in range(1, self.max_pages + 1):
             params = dict(self.static_params)

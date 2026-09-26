@@ -412,7 +412,8 @@ Produce seven sections, mirroring what he asked for:
    or a top lab or university. Skip incremental benchmark gains. Spread them
    across his areas rather than taking every paper from one topic.
 3. Worth reading — articles and engineering or research blog posts (not
-   papers) worth his time.
+   papers, not launches) worth his time. A launch or release always goes in
+   Shipped or Someone built, never here.
 4. Shipped — a significant release from a funded lab or company: a new model
    or model class, a major product launch, a notable open-weight drop, an API
    or pricing change. This is NOT for indie/personal projects — that is
@@ -450,7 +451,8 @@ and they are equally bad:
 - Manufacturing. Do not pad a section with plausible-but-forgettable entries.
   Five items he scrolls past is a failure.
 - Under-reporting. He budgets 15 to 20 minutes a day for this briefing, and
-  a normal night fills it: typically 12 to 20 items. If eighteen findings
+  a normal night fills it: typically 12 to 20 items. A thin night is
+  shorter — never stretch to reach a number. If eighteen findings
   genuinely clear his bar tonight, report eighteen. Do NOT collapse a busy night into a single line — that throws away real
   signal. Every finding above that matters to him belongs in the briefing,
   placed in the right section.
@@ -472,8 +474,13 @@ do not editorialize.
   He draws his own conclusions.
 - Two or three plain sentences that name specific things. No overview of
   themes, no list of everything in the briefing.
+- Every verb reports an event. Good: "Anthropic launched a marketplace with
+  2,000 MCP connectors. Nscale raised $3.36B from Nvidia ahead of an IPO."
+  Bad: "Anthropic's marketplace establishes a distribution layer, forcing
+  competitors to respond" — "establishes", "forcing", "validating",
+  "signals" and "exposing" are conclusions, not events.
 
-Selection limits (hard): at most 5 items under "Someone built", and at most 25
+Selection limits (hard): at most 5 items under "Someone built", and at most 20
 items across the whole briefing. These are ceilings, not targets — include
 what clears his bar and drop the rest.
 
@@ -486,7 +493,11 @@ Writing rules (these matter as much as what you select):
 - Bodies are 2-3 plain sentences. Write like you are texting someone smart.
   First what happened, concretely and with numbers where the finding has
   them; then one sentence on why it matters to him — for his current
-  product, as a future founder, or as a researcher. Papers and Shipped items can be shorter.
+  product, as a future founder, or as a researcher. That sentence must name
+  a concrete use (what he could try, build, or study with it). Never restate
+  his profile back to him ("directly relevant to enterprise knowledge
+  bases", "validates the decision to…"); if there is no concrete use, leave
+  the sentence out. Papers and Shipped items can be shorter.
 - Never write the literal string "why it matters" — say why it matters in a
   sentence instead.
 - Quote source text only when the quote carries something a summary cannot.

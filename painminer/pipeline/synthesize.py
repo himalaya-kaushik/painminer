@@ -198,6 +198,29 @@ def _parse(raw: str, index: dict[int, dict]) -> SynthesisResult:
     return result
 
 
+def drop_duplicate_stories(result: SynthesisResult) -> SynthesisResult:
+    """Keep one item per story: in SYNTHESIS_SECTIONS order, an item that
+    cites a finding id or source url already cited by an earlier item is
+    dropped. The prompt asks for this; the model doesn't always comply."""
+    seen_ids: set[int] = set()
+    seen_urls: set[str] = set()
+    for section in SYNTHESIS_SECTIONS:
+        kept = []
+        for item in result.sections.get(section) or []:
+            ids = set(item.get("finding_ids") or [])
+            urls = {
+                result.findings_index[f]["url"] for f in ids
+                if f in result.findings_index and result.findings_index[f].get("url")
+            }
+            if ids & seen_ids or urls & seen_urls:
+                continue
+            seen_ids |= ids
+            seen_urls |= urls
+            kept.append(item)
+        result.sections[section] = kept
+    return result
+
+
 def apply_caps(
     result: SynthesisResult, *, someone_built_cap: int, total_cap: int
 ) -> SynthesisResult:
@@ -277,7 +300,7 @@ def synthesize_night(
         findings_block(selected), shortlist_block(db, config)
     )
     raw = llm.synthesize(messages, SYNTHESIS_SCHEMA)
-    result = _parse(raw, index)
+    result = drop_duplicate_stories(_parse(raw, index))
     return apply_caps(
         result,
         someone_built_cap=config.digest_someone_built_cap,
