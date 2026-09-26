@@ -14,8 +14,10 @@ def _full_raw():
     return json.dumps({
         "night_summary": "Quiet night.",
         "patterns": [
-            {"headline": "Pattern A", "body": "Body A", "finding_ids": [1, 2]},
+            {"headline": "Pattern A", "body": "Body A", "topic": "Systems",
+             "finding_ids": [1, 2]},
         ],
+        "papers": [],
         "worth_reading": [
             {"headline": "", "body": "dropped, no headline", "finding_ids": [3]},
             {"headline": "Read this", "body": "Body B", "finding_ids": [4.0, 5]},
@@ -23,6 +25,8 @@ def _full_raw():
         "shipped": [
             {"headline": "Lab ships new model", "body": "Body C", "finding_ids": [6]},
         ],
+        "market": [],
+        "gaps": [],
         "someone_built": [],
     })
 
@@ -32,17 +36,59 @@ def test_parse_full_briefing_dict():
     assert isinstance(result, SynthesisResult)
     assert result.night_summary == "Quiet night."
     assert result.sections["patterns"] == [
-        {"headline": "Pattern A", "body": "Body A", "finding_ids": [1, 2]},
+        {"headline": "Pattern A", "body": "Body A", "topic": "Systems",
+         "finding_ids": [1, 2]},
     ]
     # empty-headline item dropped; finding_ids coerced to ints (non-numeric
-    # entries like a stray string id are filtered out, not coerced)
+    # entries like a stray string id are filtered out, not coerced); topic
+    # missing on this item is tolerated and defaults to "".
     assert result.sections["worth_reading"] == [
-        {"headline": "Read this", "body": "Body B", "finding_ids": [4, 5]},
+        {"headline": "Read this", "body": "Body B", "topic": "", "finding_ids": [4, 5]},
     ]
     assert result.sections["shipped"] == [
-        {"headline": "Lab ships new model", "body": "Body C", "finding_ids": [6]},
+        {"headline": "Lab ships new model", "body": "Body C", "topic": "",
+         "finding_ids": [6]},
     ]
     assert result.sections["someone_built"] == []
+
+
+def test_parse_missing_topic_does_not_drop_item():
+    raw = json.dumps({
+        "night_summary": "x",
+        "patterns": [{"headline": "h", "body": "b", "finding_ids": [1]}],
+    })
+    result = _parse(raw, {})
+    assert len(result.sections["patterns"]) == 1
+    assert result.sections["patterns"][0]["topic"] == ""
+
+
+def test_parse_keeps_topic_when_present():
+    raw = json.dumps({
+        "night_summary": "x",
+        "patterns": [{"headline": "h", "body": "b", "topic": "RL", "finding_ids": [1]}],
+    })
+    result = _parse(raw, {})
+    assert result.sections["patterns"][0]["topic"] == "RL"
+
+
+def test_parse_old_format_without_topic_key_at_all_still_parses():
+    # A synthesis JSON produced before `topic` existed: only the four old
+    # keys (headline, body, finding_ids) with no "topic" field anywhere.
+    raw = json.dumps({
+        "night_summary": "Old-format night.",
+        "patterns": [{"headline": "P", "body": "b", "finding_ids": [1]}],
+        "worth_reading": [{"headline": "W", "body": "b2", "finding_ids": [2]}],
+        "shipped": [],
+        "someone_built": [],
+    })
+    result = _parse(raw, {})
+    assert result.night_summary == "Old-format night."
+    assert result.sections["patterns"][0]["topic"] == ""
+    assert result.sections["worth_reading"][0]["topic"] == ""
+    # new sections not present in the old-format JSON come out empty.
+    assert result.sections["papers"] == []
+    assert result.sections["market"] == []
+    assert result.sections["gaps"] == []
 
 
 def test_parse_malformed_json_does_not_raise():

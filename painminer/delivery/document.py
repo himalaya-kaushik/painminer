@@ -18,14 +18,18 @@ from datetime import date as date_cls
 from pathlib import Path
 
 from painminer.pipeline.synthesize import SynthesisResult
+from painminer.prompt import SYNTHESIS_SECTIONS
 
 _SECTION_TITLES = {
     "patterns": "Patterns",
+    "papers": "Papers",
     "worth_reading": "Worth reading",
     "shipped": "Shipped",
+    "market": "Market & funding",
+    "gaps": "Gaps",
     "someone_built": "Someone built",
 }
-_SECTION_ORDER = ("patterns", "worth_reading", "shipped", "someone_built")
+_SECTION_ORDER = SYNTHESIS_SECTIONS
 
 
 @dataclass
@@ -97,7 +101,11 @@ def render_markdown(result: SynthesisResult, day: date_cls | None = None) -> str
             continue
         lines += [f"## {_SECTION_TITLES[section]}", ""]
         for n, item in items:
-            lines.append(f"### {n}. {item['headline']}")
+            topic = (item.get("topic") or "").strip()
+            if topic:
+                lines.append(f"### {n}. [{topic}] {item['headline']}")
+            else:
+                lines.append(f"### {n}. {item['headline']}")
             body = item.get("body", "").strip()
             links = _links(item, result.findings_index)
             via = _via(item, result.findings_index)

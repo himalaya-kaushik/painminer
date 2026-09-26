@@ -4,6 +4,7 @@ digest size limits, brief fixes 2 & 3)."""
 from __future__ import annotations
 
 from painminer.pipeline.synthesize import SynthesisResult, apply_caps
+from painminer.prompt import SYNTHESIS_SECTIONS
 
 
 def mk(p, w, sh, s):
@@ -21,10 +22,28 @@ def mk(p, w, sh, s):
     return r
 
 
+def mk_all(**counts):
+    """Build a result with all seven SYNTHESIS_SECTIONS, defaulting to 0
+    items for any section not named in `counts`."""
+    r = SynthesisResult()
+
+    def items(n, tag):
+        return [{"headline": f"{tag}{i}", "body": "", "finding_ids": []} for i in range(n)]
+
+    r.sections = {s: items(counts.get(s, 0), s[:2]) for s in SYNTHESIS_SECTIONS}
+    return r
+
+
 def test_someone_built_capped_independently():
     r = mk(0, 0, 0, 10)
     apply_caps(r, someone_built_cap=3, total_cap=100)
     assert len(r.sections["someone_built"]) == 3
+
+
+def test_someone_built_capped_at_5():
+    r = mk(0, 0, 0, 10)
+    apply_caps(r, someone_built_cap=5, total_cap=100)
+    assert len(r.sections["someone_built"]) == 5
 
 
 def test_total_cap_order_patterns_worth_reading_shipped_someone_built():
@@ -90,3 +109,40 @@ def test_returns_same_object_identity():
     r = mk(1, 1, 1, 1)
     out = apply_caps(r, someone_built_cap=3, total_cap=8)
     assert out is r
+
+
+# --- full 7-section priority order (patterns, papers, worth_reading,
+# shipped, market, gaps, someone_built) --------------------------------------
+
+def test_priority_across_all_seven_sections():
+    r = mk_all(patterns=3, papers=3, worth_reading=3, shipped=3, market=3,
+               gaps=3, someone_built=3)
+    apply_caps(r, someone_built_cap=5, total_cap=12)
+    # first four sections (12 items) exactly fill the cap; the rest are cut.
+    assert len(r.sections["patterns"]) == 3
+    assert len(r.sections["papers"]) == 3
+    assert len(r.sections["worth_reading"]) == 3
+    assert len(r.sections["shipped"]) == 3
+    assert len(r.sections["market"]) == 0
+    assert len(r.sections["gaps"]) == 0
+    assert len(r.sections["someone_built"]) == 0
+
+
+def test_total_cap_drops_someone_built_and_gaps_before_papers():
+    # Only enough room for the first three sections; gaps and someone_built
+    # (last in SYNTHESIS_SECTIONS priority) must be the ones cut, not papers.
+    r = mk_all(patterns=2, papers=2, worth_reading=2, shipped=0, market=0,
+               gaps=2, someone_built=2)
+    apply_caps(r, someone_built_cap=5, total_cap=6)
+    assert len(r.sections["patterns"]) == 2
+    assert len(r.sections["papers"]) == 2
+    assert len(r.sections["worth_reading"]) == 2
+    assert len(r.sections["gaps"]) == 0
+    assert len(r.sections["someone_built"]) == 0
+
+
+def test_section_order_matches_synthesis_sections():
+    assert SYNTHESIS_SECTIONS == (
+        "patterns", "papers", "worth_reading", "shipped", "market", "gaps",
+        "someone_built",
+    )

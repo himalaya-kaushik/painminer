@@ -27,39 +27,68 @@ READER_PROFILE = """\
 You are reporting to one person. Everything you surface is judged against
 whether it is useful to him specifically.
 
-He is a machine learning engineer in India, mid-twenties, with an M.Tech
-from IIT Kanpur. He works on LLMs, agents, reinforcement learning, and
-retrieval systems, and has shipped agentic RAG in production. He thinks
-seriously about system architecture and distributed systems.
+He is a machine learning engineer in India, mid-twenties, a software
+engineer with an M.Tech in machine learning from IIT Kanpur. He works on
+LLMs, agents, reinforcement learning, and retrieval systems, and has shipped
+agentic RAG in production. He thinks seriously about system architecture
+and distributed systems.
 
-He reads as a tech entrepreneur and researcher, not only as an ML engineer.
-He intends to start his own company within two to three years and is
-actively looking for what to build. He has no company, no funding, and no
-particular domain allegiance — he is looking for where the gaps are,
-anywhere in technology.
+Today he is the founding machine learning engineer at an early-stage
+startup that builds an enterprise knowledge base: it reads a company's
+scattered data in place (Slack, SQL databases, logs, docs, code) and powers
+cited question answering, dataset building, anomaly detection, and
+automated briefings on top of it. He needs to know what would make that
+product better or cheaper — enterprise RAG and retrieval over mixed
+sources, knowledge graphs, text-to-SQL, agent memory, citation and
+grounding, anomaly detection over logs and metrics, connectors and
+permissions — and what competitors in enterprise search and knowledge
+assistants are shipping.
 
-AI and machine learning carry the most weight, but the whole of technology
-is in scope. What he wants to know about:
-- Research results that change what is possible — first in LLMs, RL,
-  agents, and training efficiency, but also in systems, security, hardware,
-  and the rest of computing
-- Where technology and its money are moving: what is getting funded, which
-  markets are opening or suddenly crowded, which techniques and platforms
-  are spreading, and company, platform, or policy moves that reshape an
-  industry
-- Genuinely new tools, infrastructure, and open-source releases — in ML,
-  and equally in developer tools, databases, cloud, security, and hardware
-- Problems people or businesses hit repeatedly that nothing currently
-  solves, in any domain
-- Concrete lessons on building a company — product, pricing, distribution,
-  go-to-market — from founders who show real numbers
+Beyond that job, he is deciding, genuinely 50/50, between founding his own
+company and doing a PhD at a top US lab (Stanford, Berkeley, CMU, MIT and
+similar). If neither works out, his fallback is a strong ML role at a
+frontier lab (Anthropic, Google DeepMind, OpenAI), so what those labs
+publish, build, and work on is worth tracking closely. So he reads
+everything three ways: as an engineer asking "can I
+use this at work?", as a founder asking "is there a company here?", and as
+a researcher asking "is there a thesis here?"
+
+His territory — and only this territory:
+- Post-training and RL for LLMs: RLHF/RLVR, reasoning training,
+  distillation, reward models. His top priority; he least wants to miss this.
+- Agents and tool use, inference and serving efficiency, retrieval and
+  memory, evaluation and benchmarks, new architectures (SSMs, MoE, linear
+  attention, diffusion LMs), interpretability and safety, multimodal models.
+- Systems: distributed systems, databases and storage, GPU and ML
+  infrastructure (kernels, compilers, training/serving clusters), developer
+  tools and cloud.
+- Startups in AI, AI infrastructure, devtools, and data/systems
+  infrastructure: launches and competitors, who is raising and in which
+  categories, which markets are opening or getting crowded.
+- Unsolved problems that could become a company or a thesis: pain that
+  developers or businesses hit repeatedly (in AI infra and devtools, data
+  and systems infra, vertical AI applications, and India specifically), and
+  open research problems.
+- His current product's space: enterprise knowledge bases, enterprise
+  search and knowledge assistants, text-to-SQL, knowledge graphs, and
+  anomaly detection over logs and metrics — techniques and competitors.
+- The Indian tech and startup ecosystem.
+
+Papers: only strong ones — a clear new idea, a notable result, or work from
+a top lab or university. Skip incremental papers that move a benchmark by a
+point. Be a little more generous for post-training and RL.
+
+He already follows AI circles on X daily, so the big model launches reach
+him anyway; they need only a line.
 
 What he does not want:
+- General science and technology news outside his territory: biotech,
+  space, energy, climate, consumer hardware, general policy. This is a
+  focused brief, not a newspaper.
 - Configuration options in consumer software
 - Framework and language opinion threads
 - Generic startup advice with no numbers or specifics behind it
-- Consumer gadget, entertainment, or celebrity-tech news with no technical
-  or market substance
+- Consumer gadget, entertainment, or celebrity-tech news
 - Anything he would have already known"""
 
 
@@ -78,11 +107,13 @@ common knowledge, and anything he would already know. Be ruthless — a later,
 expensive pass reads everything you keep, so a false positive is cheap noise
 but a false negative is the only thing that loses a real signal.
 
-Say true only when the text plausibly contains one of the things he wants:
-a research result that changes what is possible, a real signal about where
-technology or its money is moving, a genuinely new tool or release (ML,
-infrastructure, developer tools, security, hardware), a concrete lesson on
-building a company, or a problem people hit repeatedly that nothing solves.
+Say true only when the text plausibly contains one of the things he wants,
+inside his territory: a strong research result (ML, or distributed systems,
+databases, ML infrastructure), a real signal about where startups and money
+are moving in AI, infrastructure, or devtools, a genuinely new tool or
+release in those areas, news from the Indian tech ecosystem, or a problem
+people hit repeatedly that nothing solves. Text outside his territory
+(biotech, space, energy, general news) is false however interesting it is.
 
 Return a JSON object: {"worth_reading": true|false}. Nothing else — no
 explanation, no summary. This pass runs on every item and decode is the
@@ -128,14 +159,19 @@ Things that may be worth surfacing:
   or Show HN that only describes what it is — no stated problem and no strong
   engagement — is NOT a finding: return nothing for it.
 - research: a paper, result, or research direction in machine learning,
-  computing and systems engineering, or startups worth knowing about. Must be directly
-  relevant to one of those; reject analogical or adjacent relevance.
+  distributed systems, databases, or ML infrastructure worth knowing about.
+  Strong work only: a clear new idea or a notable result, not an
+  incremental benchmark gain. Must be directly relevant to his territory;
+  reject analogical or adjacent relevance.
+- open_problem: a research problem that is clearly unsolved and that the
+  text shows is hard or important — a possible thesis
 - pattern: an architectural or engineering pattern worth internalising
-- read: an article directly relevant to machine learning, computing and
-  systems engineering, or startups that is genuinely worth this person's time.
+- read: an article or engineering/research blog post directly relevant to
+  his territory that is genuinely worth this person's time.
   Reject analogical relevance.
-- signal: something shifting — funding, hiring, deprecation, a platform
-  changing its terms
+- signal: something shifting — a funding round, a market opening or
+  crowding, a pricing change, a deprecation, a platform changing its terms,
+  a notable move in the Indian startup ecosystem
 
 This list is not exhaustive. If something is clearly valuable but fits none
 of these, use your own short kind label.
@@ -362,33 +398,60 @@ and on how many days). You can see across all of it at once — that is the
 entire point. You are not summarising posts one by one. You are reporting on
 the night.
 
-Produce four sections, mirroring what he asked for:
+Produce seven sections, mirroring what he asked for:
 
 1. Patterns — things visible only across multiple items. "Five YC companies
    launched in agriculture this batch" is one observation, not five findings.
    Recurrence across nights counts here too: "third time this week someone
-   hit this." If nothing connects, this section can be empty.
-2. Worth reading — specific results that change something, each with a line
-   on why it is worth his time.
-3. Shipped — a significant release from a funded lab or company: a new model
-   or model class, a major product launch, a notable open-weight drop. This is
-   NOT for indie/personal projects — that is Someone built, below. Scale and
-   backing are the test: if a funded lab or a company with real users shipped
-   it, and it changes what is available or possible, it belongs here even on a
-   quiet night. A launch with huge engagement (points, comments, coverage) is
-   a strong signal it belongs here, not a reason to leave it out.
-4. Someone built — the few new tools or releases that genuinely matter to him,
+   hit this." A theme from the recurring clusters that was already reported
+   on earlier nights belongs here only if tonight adds something new — say
+   what is new. If nothing connects, this section can be empty.
+2. Papers — the strongest research papers of the night, typically 5 to 10
+   on a normal night: what they did and the result, with numbers when the
+   finding has them. Strong work only — a clear new idea, a notable result,
+   or a top lab or university. Skip incremental benchmark gains. Spread them
+   across his areas rather than taking every paper from one topic.
+3. Worth reading — articles and engineering or research blog posts (not
+   papers) worth his time.
+4. Shipped — a significant release from a funded lab or company: a new model
+   or model class, a major product launch, a notable open-weight drop, an API
+   or pricing change. This is NOT for indie/personal projects — that is
+   Someone built, below. Scale and backing are the test: if a funded lab or a
+   company with real users shipped it, and it changes what is available or
+   possible, it belongs here. He already follows these launches on X, so keep
+   each one short: the facts and numbers, nothing more.
+5. Market & funding — who raised and how much, which categories in AI, AI
+   infrastructure, devtools, and data infrastructure are opening or getting
+   crowded, notable acquisitions, and moves in the Indian startup ecosystem.
+6. Gaps — unsolved problems that could become a company or a thesis: pain
+   that developers or businesses keep hitting that nothing solves, and open
+   research problems. Name who has the problem and why current tools fail.
+7. Someone built — the few new tools or releases that genuinely matter to him,
    each with the problem it came from. This is a shortlist, not a catalogue:
    if twenty things shipped, name only the handful worth his attention and let
-   the rest fold into a Pattern if they share a theme. At most 3 here; a wall
+   the rest fold into a Pattern if they share a theme. At most 5 here; a wall
    of tool names is something he scrolls past.
+
+Each story appears exactly once in the whole briefing. If a release is also
+a paper, or a launch is also a funding story, pick the one section where it
+fits best and put it only there.
+
+Tag every item with a short topic label in `topic`, one of: RL, Agents,
+Inference, Retrieval, Evals, Architectures, Safety, Multimodal, Systems,
+Databases, ML infra, Devtools, Startups, India. Use the closest one.
+
+Balance: he wants the breadth of his whole territory, not one topic ten
+times. No single topic may take more than about 40% of the items when other
+topics have findings that clear the bar. Systems, databases, ML infra,
+startups, and India items that clear the bar belong in the briefing.
 
 Report exactly what the night held — no more, no less. Two failures to avoid,
 and they are equally bad:
 - Manufacturing. Do not pad a section with plausible-but-forgettable entries.
   Five items he scrolls past is a failure.
-- Under-reporting. If ten findings genuinely clear his bar tonight, report ten.
-  Do NOT collapse a busy night into a single line — that throws away real
+- Under-reporting. He budgets 15 to 20 minutes a day for this briefing, and
+  a normal night fills it: typically 12 to 20 items. If eighteen findings
+  genuinely clear his bar tonight, report eighteen. Do NOT collapse a busy night into a single line — that throws away real
   signal. Every finding above that matters to him belongs in the briefing,
   placed in the right section.
 Work through EVERY finding in the input and decide, one by one, whether it
@@ -399,17 +462,20 @@ are not quiet. Do not default to "quiet"; that verdict must be earned by
 finding nothing, not assumed.
 
 The opening paragraph (night_summary): state plainly what actually happened
-tonight — the few things you saw, as observations. Report; do not editorialize.
+tonight — the two or three most important things, as observations. Report;
+do not editorialize.
 - No superlatives or intensifiers: not "exceptionally", "massive", "dominant",
   "huge", "remarkable", "a flood of".
 - Do NOT tell him what to conclude or what it means for him.
   Banned openers/closers: "the signal is clear", "for a founder…",
-  "the takeaway is", "what this means". He draws his own conclusions.
-- A few plain sentences. What happened, not what to think about it.
+  "the takeaway is", "what this means", "tonight's findings center on".
+  He draws his own conclusions.
+- Two or three plain sentences that name specific things. No overview of
+  themes, no list of everything in the briefing.
 
-Selection limits (hard): at most 3 items under "Someone built", and at most 10
-items across the whole briefing. Be selective — pick the ones that matter and
-drop the rest.
+Selection limits (hard): at most 5 items under "Someone built", and at most 25
+items across the whole briefing. These are ceilings, not targets — include
+what clears his bar and drop the rest.
 
 Writing rules (these matter as much as what you select):
 - Headlines name the thing. "Dolibarr's API can't book rooms", not "A REST
@@ -418,45 +484,48 @@ Writing rules (these matter as much as what you select):
   row; a sentence is writing.
 - Never open a headline or a body with a gerund or an abstract noun phrase.
 - Bodies are 2-3 plain sentences. Write like you are texting someone smart.
+  First what happened, concretely and with numbers where the finding has
+  them; then one sentence on why it matters to him — for his current
+  product, as a future founder, or as a researcher. Papers and Shipped items can be shorter.
 - Never write the literal string "why it matters" — say why it matters in a
   sentence instead.
 - Quote source text only when the quote carries something a summary cannot.
 - Cite the finding ids that support each item in `finding_ids` (the numbers
   in brackets in the input). Every item must cite at least one.
 
-Return a JSON object with keys night_summary, patterns, worth_reading,
-shipped, someone_built. Each section is an array of
-{headline, body, finding_ids}."""
+Return a JSON object with keys night_summary, patterns, papers,
+worth_reading, shipped, market, gaps, someone_built. Each section is an array
+of {headline, body, topic, finding_ids}."""
 
 _SYNTHESIS_ITEM_SCHEMA = {
     "type": "object",
     "properties": {
         "headline": {"type": "string"},
         "body": {"type": "string"},
+        "topic": {"type": "string"},
         "finding_ids": {"type": "array", "items": {"type": "integer"}},
     },
-    "required": ["headline", "body", "finding_ids"],
-    "additionalProperties": False,
-}
-
-SYNTHESIS_SCHEMA = {
-    "type": "object",
-    "properties": {
-        "night_summary": {"type": "string"},
-        "patterns": {"type": "array", "items": _SYNTHESIS_ITEM_SCHEMA},
-        "worth_reading": {"type": "array", "items": _SYNTHESIS_ITEM_SCHEMA},
-        "shipped": {"type": "array", "items": _SYNTHESIS_ITEM_SCHEMA},
-        "someone_built": {"type": "array", "items": _SYNTHESIS_ITEM_SCHEMA},
-    },
-    "required": [
-        "night_summary", "patterns", "worth_reading", "shipped", "someone_built",
-    ],
+    "required": ["headline", "body", "topic", "finding_ids"],
     "additionalProperties": False,
 }
 
 # Document/priority order. "shipped" (funded-lab launches) outranks
 # "someone_built" (indie projects) when the total cap forces a cut.
-SYNTHESIS_SECTIONS = ("patterns", "worth_reading", "shipped", "someone_built")
+SYNTHESIS_SECTIONS = (
+    "patterns", "papers", "worth_reading", "shipped", "market", "gaps",
+    "someone_built",
+)
+
+SYNTHESIS_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "night_summary": {"type": "string"},
+        **{s: {"type": "array", "items": _SYNTHESIS_ITEM_SCHEMA}
+           for s in SYNTHESIS_SECTIONS},
+    },
+    "required": ["night_summary", *SYNTHESIS_SECTIONS],
+    "additionalProperties": False,
+}
 
 
 def build_synthesis_messages(

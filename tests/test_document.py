@@ -17,8 +17,8 @@ def _result(sections=None, night_summary="", findings_index=None):
     )
 
 
-def _item(headline, body, finding_ids):
-    return {"headline": headline, "body": body, "finding_ids": finding_ids}
+def _item(headline, body, finding_ids, topic=""):
+    return {"headline": headline, "body": body, "finding_ids": finding_ids, "topic": topic}
 
 
 def test_render_markdown_heading_and_summary():
@@ -256,6 +256,57 @@ def test_headlines_url_stays_none_for_newsletter_only_item():
     hs = headlines(result, limit=5)
     assert len(hs) == 1
     assert hs[0].url is None
+
+
+def test_render_markdown_topic_tag_in_heading_when_present():
+    result = _result(
+        sections={
+            "patterns": [_item("P1", "b1", [], topic="RL")],
+            "worth_reading": [],
+            "someone_built": [],
+        },
+    )
+    md = render_markdown(result, day=datetime.date(2026, 9, 15))
+    assert "### 1. [RL] P1" in md
+
+
+def test_render_markdown_no_topic_tag_when_topic_empty():
+    result = _result(
+        sections={
+            "patterns": [_item("P1", "b1", [], topic="")],
+            "worth_reading": [],
+            "someone_built": [],
+        },
+    )
+    md = render_markdown(result, day=datetime.date(2026, 9, 15))
+    assert "### 1. P1" in md
+    assert "[" not in md.split("### 1. P1")[0][-5:]  # no stray tag artifact
+    assert "### 1. [" not in md
+
+
+def test_headlines_companion_list_omits_topic_tag():
+    result = _result(
+        sections={
+            "patterns": [_item("P1", "b1", [], topic="Systems")],
+            "worth_reading": [],
+            "someone_built": [],
+        },
+    )
+    hs = headlines(result, limit=5)
+    assert hs[0].headline == "P1"   # plain headline, no [Systems] tag
+
+
+def test_all_synthesis_sections_render_titles_in_order():
+    from painminer.prompt import SYNTHESIS_SECTIONS
+    sections = {s: [_item(f"H-{s}", "b", [])] for s in SYNTHESIS_SECTIONS}
+    result = _result(sections=sections)
+    md = render_markdown(result, day=datetime.date(2026, 9, 15))
+    expected_titles = [
+        "Patterns", "Papers", "Worth reading", "Shipped", "Market & funding",
+        "Gaps", "Someone built",
+    ]
+    positions = [md.index(f"## {t}") for t in expected_titles]
+    assert positions == sorted(positions)   # titles appear in SYNTHESIS_SECTIONS order
 
 
 def test_write_digest_roundtrip():

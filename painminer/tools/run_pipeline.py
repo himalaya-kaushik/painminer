@@ -21,6 +21,7 @@ from painminer.delivery import document
 from painminer.pipeline.embed import Embedder
 from painminer.llm import LLM
 from painminer.delivery.telegram_bot import _send_scan_digest
+from painminer.prompt import SYNTHESIS_SECTIONS
 
 
 def _findings_per_source(db: DB) -> dict[str, int]:
@@ -88,7 +89,7 @@ def main() -> None:
     if summary.synthesis is not None:
         r = summary.synthesis
         counts = " · ".join(f"{s}={len(r.sections.get(s, []))}"
-                            for s in ("patterns", "worth_reading", "shipped", "someone_built"))
+                            for s in SYNTHESIS_SECTIONS)
         print(f"Synthesis: {counts}  |  \"{r.night_summary[:120]}\"")
     if summary.stage_errors:
         for stage, err in summary.stage_errors.items():

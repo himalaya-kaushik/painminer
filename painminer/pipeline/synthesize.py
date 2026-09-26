@@ -191,6 +191,7 @@ def _parse(raw: str, index: dict[int, dict]) -> SynthesisResult:
                 clean.append({
                     "headline": headline,
                     "body": str(it.get("body") or "").strip(),
+                    "topic": str(it.get("topic") or "").strip(),
                     "finding_ids": fids,
                 })
         result.sections[section] = clean
@@ -203,9 +204,9 @@ def apply_caps(
     """Enforce the digest size limits deterministically (brief fixes 2 & 3).
 
     "Someone built" is capped first, then the whole briefing is capped in
-    SYNTHESIS_SECTIONS priority order (patterns, worth_reading, shipped,
-    someone_built) so the highest-value sections survive a total-cap cut.
-    Mutates and returns the result.
+    SYNTHESIS_SECTIONS priority order (patterns, papers, worth_reading,
+    shipped, market, gaps, someone_built) so the highest-value sections
+    survive a total-cap cut. Mutates and returns the result.
     """
     if result.sections.get("someone_built"):
         result.sections["someone_built"] = result.sections["someone_built"][:someone_built_cap]

@@ -275,8 +275,20 @@ class AtomAdapter(Adapter):
         self, since_ts: int, until_ts: int | None = None
     ) -> Iterator[list[FetchedItem]]:
         lower = since_ts - self.overlap_seconds
+        last_error: Exception | None = None
+        failed = 0
         for url in self.feed_urls:
-            raw = self._get(url)
-            page = self._page(raw, lower, until_ts)
+            # One dead feed in a multi-feed source must not cost the others;
+            # only when every feed fails does the source fail as before.
+            try:
+                raw = self._get(url)
+                page = self._page(raw, lower, until_ts)
+            except Exception as exc:
+                failed += 1
+                last_error = exc
+                print(f"  feed failed, skipping: {url} ({exc})", flush=True)
+                continue
             if page:
                 yield page
+        if last_error is not None and failed == len(self.feed_urls):
+            raise last_error

@@ -42,8 +42,9 @@ def test_defaults_via_direct_construction():
         llm_base_url="x",
         llm_model="m",
     )
-    assert cfg.digest_someone_built_cap == 3
-    assert cfg.digest_total_cap == 10
+    assert cfg.digest_someone_built_cap == 5
+    assert cfg.digest_total_cap == 25
+    assert cfg.synthesis_max_tokens == 8000
     assert cfg.synthesis_reasoning == "none"
     assert cfg.max_run_minutes == 0
 

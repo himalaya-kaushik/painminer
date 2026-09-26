@@ -196,3 +196,42 @@ def test_feed_urls_list_supported():
     assert adapter.feed_urls == ["https://a.test/feed", "https://b.test/feed"]
     pages = list(adapter.iter_items(0))
     assert len(pages) == 2  # one page per feed url
+
+
+# --- multi-feed failure isolation --------------------------------------
+
+
+class _RoutedClient:
+    """Serves RSS_FIXTURE except for URLs listed as dead, which raise."""
+
+    def __init__(self, dead):
+        self.dead = set(dead)
+
+    def get(self, url, *a, **k):
+        if url in self.dead:
+            raise RuntimeError(f"HTTP 404 for {url}")
+        return FakeResp(RSS_FIXTURE)
+
+
+def _multi(dead):
+    source = {"name": "blogs", "adapter": "rss", "config_json": _config({
+        "feed_url": None,
+        "feed_urls": ["https://a.test/feed", "https://b.test/feed"],
+        "overlap_hours": 100000,
+    })}
+    return AtomAdapter(source, _RoutedClient(dead))
+
+
+def test_one_dead_feed_does_not_kill_the_others():
+    items = _collect(_multi(dead=["https://a.test/feed"]), since=0)
+    assert any("FATHER" in it.raw_text for it in items)
+
+
+def test_all_feeds_dead_still_raises():
+    adapter = _multi(dead=["https://a.test/feed", "https://b.test/feed"])
+    try:
+        _collect(adapter, since=0)
+    except RuntimeError as exc:
+        assert "b.test" in str(exc)
+    else:
+        raise AssertionError("expected the source to fail when every feed fails")

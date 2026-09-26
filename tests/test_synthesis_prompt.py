@@ -10,7 +10,8 @@ from painminer.prompt import (
 
 def test_synthesis_schema_required_keys():
     assert set(SYNTHESIS_SCHEMA["required"]) == {
-        "night_summary", "patterns", "worth_reading", "shipped", "someone_built",
+        "night_summary", "patterns", "papers", "worth_reading", "shipped",
+        "market", "gaps", "someone_built",
     }
 
 
@@ -19,14 +20,17 @@ def test_synthesis_schema_sections_are_arrays_of_items():
         section_schema = SYNTHESIS_SCHEMA["properties"][section]
         assert section_schema["type"] == "array"
         item_schema = section_schema["items"]
-        assert item_schema["required"] == ["headline", "body", "finding_ids"]
+        assert item_schema["required"] == ["headline", "body", "topic", "finding_ids"]
         assert item_schema["additionalProperties"] is False
 
 
 def test_synthesis_sections_order():
     # "shipped" (funded-lab launches) outranks "someone_built" (indie
     # projects) so it survives the total-cap cut first.
-    assert SYNTHESIS_SECTIONS == ("patterns", "worth_reading", "shipped", "someone_built")
+    assert SYNTHESIS_SECTIONS == (
+        "patterns", "papers", "worth_reading", "shipped", "market", "gaps",
+        "someone_built",
+    )
 
 
 def test_build_synthesis_messages_shape():

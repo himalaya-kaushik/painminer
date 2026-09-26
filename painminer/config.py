@@ -74,7 +74,7 @@ class Config:
     # another LM Studio alias for the same weights (a request for it comes back
     # `served as: qwen-extract`, byte-identical output). The digest quality win
     # attributed to it actually came from de-parroting SYNTHESIS_SYSTEM_PROMPT.
-    synthesis_max_tokens: int = 6000             # room for a full briefing
+    synthesis_max_tokens: int = 8000             # room for a full briefing
     # Pass 3 is one long call and scales with the findings block: it took
     # ~149s on a ~33k-char prompt, so a backlog night (hundreds of findings)
     # needs real headroom or the digest dies after the whole judge pass.
@@ -83,7 +83,7 @@ class Config:
     # Hard cap on how many of tonight's findings go into the pass-3 prompt,
     # highest-confidence first. Without it a 3000-item backlog produces a
     # ~135k-char prompt that risks both the timeout and the context window.
-    # 250 is still far more material than a 10-item digest can use.
+    # 250 is still far more material than a 25-item digest can use.
     synthesis_max_findings: int = 250
     # When the cap above binds, no one source may fill more than this share
     # of it before the others are seen (unused slots are refilled). Measured
@@ -92,8 +92,8 @@ class Config:
     digests_dir: str = "digests"       # where YYYY-MM-DD.md is written (§4)
     # Hard caps on the digest, enforced deterministically after synthesis so
     # they don't depend on the model obeying the prompt.
-    digest_someone_built_cap: int = 3  # max items under "Someone built"
-    digest_total_cap: int = 10         # max items across the whole briefing
+    digest_someone_built_cap: int = 5  # max items under "Someone built"
+    digest_total_cap: int = 25         # max items across the whole briefing
 
 
 # Maps a Config field to its .env variable name.

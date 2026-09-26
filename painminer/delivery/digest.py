@@ -25,6 +25,7 @@ KIND_EMOJI = {
     "research": "🔬",
     "read": "📄",
     "pattern": "🧩",
+    "open_problem": "🧭",
 }
 
 
