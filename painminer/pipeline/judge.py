@@ -29,6 +29,7 @@ import time
 from dataclasses import dataclass, field
 
 import openai
+from postgrest.exceptions import APIError as PostgrestAPIError
 
 from painminer.config import Config, load_config
 from painminer.db import DB
@@ -197,10 +198,23 @@ def judge_item(
 
 # --- commit -----------------------------------------------------------------
 
+def _strip_nul(value):
+    """Drop NUL characters anywhere in a findings payload. Postgres text can't
+    store \u0000, and the model occasionally emits one (seen on an arXiv
+    abstract with inline LaTeX) — one such string rejected the whole write."""
+    if isinstance(value, str):
+        return value.replace("\x00", "")
+    if isinstance(value, list):
+        return [_strip_nul(v) for v in value]
+    if isinstance(value, dict):
+        return {k: _strip_nul(v) for k, v in value.items()}
+    return value
+
+
 def commit_judgement(db: DB, item_id: int, findings: list[dict]) -> int:
     """Record findings + null raw_text + mark done, atomically. Returns count."""
     resp = db.client.rpc(
-        "record_judgement", {"p_item_id": item_id, "p_findings": findings}
+        "record_judgement", {"p_item_id": item_id, "p_findings": _strip_nul(findings)}
     ).execute()
     return resp.data if isinstance(resp.data, int) else len(findings)
 
@@ -329,7 +343,15 @@ def run_judge(
 
         if result.ok and result.findings is not None:
             allowed = cap_for_thread(thread_counts, key, len(result.findings))
-            n = commit_judgement(db, item["id"], result.findings[:allowed])
+            try:
+                n = commit_judgement(db, item["id"], result.findings[:allowed])
+            except PostgrestAPIError:
+                # The DB rejected this item's findings (bad content, not an
+                # outage — an outage fails mark_failed too and still raises).
+                # Retire the one item rather than killing the whole run.
+                queue_ops.mark_failed(db, item["id"])
+                summary.items_failed += 1
+                return
             thread_counts[key] = thread_counts.get(key, 0) + n
             summary.items_judged += 1
             summary.findings_created += n

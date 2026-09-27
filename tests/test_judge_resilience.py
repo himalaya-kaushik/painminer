@@ -207,3 +207,35 @@ def test_poison_item_fails_after_max_attempts_instead_of_looping_forever():
             assert db.items[i]["state"] == "done"
     assert summary.items_failed == 1
     assert summary.items_judged == 9
+
+
+def test_nul_in_findings_is_stripped_before_write():
+    # A real incident: the model emitted \u0000 in a finding; Postgres text
+    # rejected it and the uncaught error killed the whole nightly run.
+    from painminer.pipeline.judge import commit_judgement
+
+    db = FakeDB(1)
+    sent = {}
+    rpc = db.client.rpc
+    db.client.rpc = lambda name, params: (sent.update(params), rpc(name, params))[1]
+    commit_judgement(db, 1, [{"statement": "a\x00b", "tags": ["x\x00"]}])
+    assert sent["p_findings"] == [{"statement": "ab", "tags": ["x"]}]
+
+
+def test_db_rejecting_one_item_does_not_abort_the_run():
+    from postgrest.exceptions import APIError
+
+    db = FakeDB(3)
+    rpc = db.client.rpc
+
+    def picky_rpc(name, params):
+        if name == "record_judgement" and params["p_item_id"] == 2:
+            raise APIError({"message": "bad row", "code": "22P05"})
+        return rpc(name, params)
+
+    db.client.rpc = picky_rpc
+    llm = FlakyLLM()
+    summary = run_judge(db, llm, _config(), context_fetcher=None)
+    assert db.items[2]["state"] == "failed"
+    assert db.items[1]["state"] == db.items[3]["state"] == "done"
+    assert summary.items_failed == 1
