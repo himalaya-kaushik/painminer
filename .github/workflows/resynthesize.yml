@@ -1,0 +1,64 @@
+name: resynthesize
+
+# Manual only. Rebuilds and delivers a night's digest from findings already in
+# the DB (pass 3 only; no fetching or judging). Use when the nightly judged
+# everything but the digest came out empty.
+on:
+  workflow_dispatch:
+    inputs:
+      since:
+        description: "runs.started_at of the night to rebuild (ISO, UTC)"
+        required: true
+      day:
+        description: "Digest date YYYY-MM-DD (default: today)"
+        required: false
+
+permissions:
+  contents: read
+
+env:
+  LLM_MODEL:   qwen/qwen3.6-35b-a3b
+  EMBED_MODEL: text-embedding-bge-small-en-v1.5
+
+concurrency:
+  group: nightly
+  cancel-in-progress: false
+
+jobs:
+  resynthesize:
+    runs-on: ubuntu-latest
+    environment: nightly
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.12'
+          cache: pip
+      - name: Join tailnet
+        uses: tailscale/github-action@306e68a486fd2350f2bfc3b19fcd143891a4a2d8 # v4
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+          tags: tag:ci
+          version: latest
+      - name: Preflight - is the model host actually up?
+        run: curl -sSf -m 30 http://llm-host:1234/v1/models -o /tmp/models.json && grep -Fq "\"$LLM_MODEL\"" /tmp/models.json
+      - run: pip install -r requirements.txt
+      - name: Resynthesize and deliver
+        env:
+          SUPABASE_URL:         ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          TELEGRAM_TOKEN:       ${{ secrets.TELEGRAM_TOKEN }}
+          TELEGRAM_CHAT_ID:     ${{ secrets.TELEGRAM_CHAT_ID }}
+          LLM_BASE_URL:         http://llm-host:1234/v1
+          SINCE: ${{ inputs.since }}
+          DAY:   ${{ inputs.day }}
+        run: python -m painminer.tools.resynthesize --since "$SINCE" ${DAY:+--day "$DAY"}
+      - name: Upload digest
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: digest
+          path: digests/
+          if-no-files-found: warn

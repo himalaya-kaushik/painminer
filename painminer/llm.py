@@ -122,6 +122,7 @@ class LLM:
                     max_tokens=max_tokens,
                     **({"timeout": timeout} if timeout is not None else {}),
                 )
+                self.last_finish_reason = resp.choices[0].finish_reason
                 return resp.choices[0].message.content or ""
             except _RETRYABLE as exc:
                 last_exc = exc

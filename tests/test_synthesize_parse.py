@@ -286,3 +286,15 @@ def test_select_for_prompt_missing_source_treated_as_one_bucket():
     out = select_for_prompt(findings, 2, max_source_share=0.5)
     assert len(out) == 2
     assert [f["id"] for f in out] == sorted(f["id"] for f in out)
+
+
+def test_parse_tolerates_markdown_fence_and_prose():
+    raw = "Here you go:\n```json\n" + _full_raw() + "\n```"
+    result = _parse(raw, {})
+    assert not result.night_summary.startswith("(synthesis returned")
+    assert result.sections["patterns"]
+
+
+def test_parse_truncated_json_is_still_unparseable():
+    result = _parse(_full_raw()[:-40], {})
+    assert result.night_summary == "(synthesis returned unparseable output)"

@@ -165,10 +165,22 @@ def shortlist_block(db: DB, config: Config) -> str:
     return "\n".join(lines)
 
 
+def _loads_lenient(raw: str):
+    """json.loads, tolerating a markdown fence or prose around the object.
+    Raises json.JSONDecodeError if no object can be recovered."""
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError:
+        start, end = raw.find("{"), raw.rfind("}")
+        if start == -1 or end <= start:
+            raise
+        return json.loads(raw[start:end + 1])
+
+
 def _parse(raw: str, index: dict[int, dict]) -> SynthesisResult:
     result = SynthesisResult(findings_index=index, n_findings=len(index), raw=raw)
     try:
-        data = json.loads(raw)
+        data = _loads_lenient(raw)
     except json.JSONDecodeError:
         result.night_summary = "(synthesis returned unparseable output)"
         return result
@@ -294,13 +306,30 @@ def synthesize_night(
     findings, index = gather_tonight(db, since)
     # Index keeps every finding (so a cited id still resolves its url/cluster
     # even if it was cut from the prompt); only the prompt block is capped.
-    selected = select_for_prompt(findings, config.synthesis_max_findings,
-                                 config.synthesis_max_source_share)
-    messages = build_synthesis_messages(
-        findings_block(selected), shortlist_block(db, config)
-    )
-    raw = llm.synthesize(messages, SYNTHESIS_SCHEMA)
-    result = drop_duplicate_stories(_parse(raw, index))
+    shortlist = shortlist_block(db, config)
+    # An unparseable response (truncated at max_tokens, a degenerate loop) is
+    # retried once on a prompt half the size: a backlog night is the usual
+    # trigger, and a smaller prompt gives the model less to lose its place in.
+    max_findings = config.synthesis_max_findings
+    for attempt in (1, 2):
+        selected = select_for_prompt(findings, max_findings,
+                                     config.synthesis_max_source_share)
+        messages = build_synthesis_messages(findings_block(selected), shortlist)
+        raw = llm.synthesize(messages, SYNTHESIS_SCHEMA)
+        result = _parse(raw, index)
+        if not result.night_summary.startswith("(synthesis returned"):
+            break
+        # The raw output used to be discarded, leaving no way to tell
+        # truncation from garbage. Print enough to diagnose from the CI log.
+        print(
+            f"synthesis attempt {attempt} unparseable: "
+            f"finish_reason={getattr(llm, 'last_finish_reason', '?')} "
+            f"len={len(raw)} prompt_findings={len(selected)}\n"
+            f"  head: {raw[:300]!r}\n  tail: {raw[-300:]!r}",
+            flush=True,
+        )
+        max_findings = max(1, len(selected) // 2)
+    result = drop_duplicate_stories(result)
     return apply_caps(
         result,
         someone_built_cap=config.digest_someone_built_cap,
